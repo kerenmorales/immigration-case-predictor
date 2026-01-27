@@ -1,0 +1,18 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# Model files (loaded from HuggingFace)
+models/
+*.zip
+data/
+
+# Node
+node_modules/
+dist/
+
+# OS
+.DS_Store
