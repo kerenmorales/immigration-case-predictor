@@ -1,0 +1,24 @@
+{
+  "timestamp": "2026-01-21T16:17:34.143211",
+  "responses": {
+    "sponsor_full_name": "Robert Lee",
+    "sponsor_dob": "1982-09-13",
+    "sponsor_citizenship": "Canadian CItizen",
+    "sponsor_address": "91 Senator Reesors Drive, Markham, Ontario, L3P 3E4",
+    "sponsor_phone": "6478858596",
+    "sponsor_email": "keren.morales@gmail.com",
+    "applicant_full_name": "Keren Morales",
+    "applicant_dob": "1971-08-25",
+    "applicant_citizenship": "Guatemala",
+    "applicant_passport": "118999000",
+    "applicant_address": "123 San Juan, chiqumulaa",
+    "applicant_phone": "647408290",
+    "applicant_email": "keren.morales@gmail.com",
+    "marriage_date": "2026-01-10",
+    "marriage_location": "Guatemala, Guatemala",
+    "first_met_date": "2023-10-13",
+    "first_met_location": "Chiquimula",
+    "relationship_start": "2023-10-13",
+    "living_together": "no"
+  }
+}

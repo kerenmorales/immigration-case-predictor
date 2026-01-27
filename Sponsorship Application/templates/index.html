@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IRCC Spousal Sponsorship Assistant</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🇨🇦 IRCC Spousal Sponsorship Assistant</h1>
+            <p>Let me help you fill out your spousal sponsorship application forms</p>
+        </header>
+
+        <div class="progress-container">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="progress-text" id="progressText">Ready to start</div>
+        </div>
+
+        <div class="chat-container" id="chatContainer">
+            <div class="welcome-message">
+                <h2>Welcome!</h2>
+                <p>I'll guide you through collecting all the information needed for your IRCC spousal sponsorship application.</p>
+                <p>This includes:</p>
+                <ul>
+                    <li>Sponsor information (IMM 1344)</li>
+                    <li>Applicant information (IMM 0008)</li>
+                    <li>Relationship details (IMM 5532)</li>
+                </ul>
+                <button class="btn btn-primary" onclick="startChat()">Start Application</button>
+            </div>
+        </div>
+
+        <div class="input-container" id="inputContainer" style="display: none;">
+            <form id="answerForm" onsubmit="submitAnswer(event)">
+                <input type="text" id="answerInput" placeholder="Type your answer..." autocomplete="off">
+                <button type="submit" class="btn btn-send">Send</button>
+            </form>
+        </div>
+
+        <div class="completion-actions" id="completionActions" style="display: none;">
+            <button class="btn btn-primary" onclick="viewSummary()">View Summary</button>
+            <button class="btn btn-secondary" onclick="downloadData()">Download Data</button>
+            <button class="btn btn-secondary" onclick="startOver()">Start Over</button>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

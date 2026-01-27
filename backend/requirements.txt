@@ -6,7 +6,7 @@ numpy
 joblib
 python-multipart
 pydantic
-torch
 transformers==4.36.0
 accelerate==0.25.0
-gunicorn
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
