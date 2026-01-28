@@ -137,6 +137,27 @@ function SponsorshipAssistant({ formData, setFormData }) {
 
   const updateField = (field, value) => setFormData(prev => ({ ...prev, [field]: value }))
 
+  // Validation for each step
+  const isStep1Valid = () => {
+    const required = ['sponsor_family_name', 'sponsor_given_name', 'sponsor_dob', 'sponsor_sex', 
+      'sponsor_country_birth', 'sponsor_citizenship', 'sponsor_phone', 'sponsor_email',
+      'sponsor_street', 'sponsor_city', 'sponsor_province', 'sponsor_postal']
+    return required.every(field => formData[field]?.trim())
+  }
+
+  const isStep2Valid = () => {
+    const required = ['applicant_family_name', 'applicant_given_name', 'applicant_dob', 'applicant_sex',
+      'applicant_country_birth', 'applicant_citizenship', 'applicant_passport', 'applicant_passport_expiry',
+      'applicant_marital', 'applicant_phone', 'applicant_email', 'applicant_address']
+    return required.every(field => formData[field]?.trim())
+  }
+
+  const isStep3Valid = () => {
+    const required = ['marriage_date', 'marriage_location', 'first_met_date', 'first_met_location',
+      'relationship_start', 'living_together']
+    return required.every(field => formData[field]?.trim())
+  }
+
   const downloadFilledPDFs = async () => {
     setDownloading(true)
     try {
@@ -330,8 +351,9 @@ function SponsorshipAssistant({ formData, setFormData }) {
               <input type="text" value={formData.sponsor_postal || ''} onChange={(e) => updateField('sponsor_postal', e.target.value.toUpperCase())} className="w-full border rounded-md p-2" placeholder="A1A 1A1" maxLength={7} required />
             </div>
           </div>
-          <div className="mt-6 flex justify-end">
-            <button onClick={() => setStep(2)} className="bg-indigo-600 text-white px-6 py-2 rounded-full hover:bg-indigo-700">
+          <div className="mt-6 flex justify-between items-center">
+            <span className="text-sm text-gray-500">{isStep1Valid() ? '✓ All fields complete' : 'Please fill all required fields'}</span>
+            <button onClick={() => setStep(2)} disabled={!isStep1Valid()} className="bg-indigo-600 text-white px-6 py-2 rounded-full hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed">
               Next: Applicant Info →
             </button>
           </div>
@@ -404,9 +426,10 @@ function SponsorshipAssistant({ formData, setFormData }) {
               <input type="text" value={formData.applicant_address || ''} onChange={(e) => updateField('applicant_address', e.target.value)} className="w-full border rounded-md p-2" placeholder="Full address including country" required />
             </div>
           </div>
-          <div className="mt-6 flex justify-between">
+          <div className="mt-6 flex justify-between items-center">
             <button onClick={() => setStep(1)} className="text-gray-600 px-6 py-2 hover:text-gray-800">← Back</button>
-            <button onClick={() => setStep(3)} className="bg-indigo-600 text-white px-6 py-2 rounded-full hover:bg-indigo-700">
+            <span className="text-sm text-gray-500">{isStep2Valid() ? '✓ All fields complete' : 'Please fill all required fields'}</span>
+            <button onClick={() => setStep(3)} disabled={!isStep2Valid()} className="bg-indigo-600 text-white px-6 py-2 rounded-full hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed">
               Next: Relationship →
             </button>
           </div>
@@ -447,9 +470,10 @@ function SponsorshipAssistant({ formData, setFormData }) {
               </select>
             </div>
           </div>
-          <div className="mt-6 flex justify-between">
+          <div className="mt-6 flex justify-between items-center">
             <button onClick={() => setStep(2)} className="text-gray-600 px-6 py-2 hover:text-gray-800">← Back</button>
-            <button onClick={() => setStep(4)} className="bg-green-600 text-white px-6 py-2 rounded-full hover:bg-green-700">
+            <span className="text-sm text-gray-500">{isStep3Valid() ? '✓ All fields complete' : 'Please fill all required fields'}</span>
+            <button onClick={() => setStep(4)} disabled={!isStep3Valid()} className="bg-green-600 text-white px-6 py-2 rounded-full hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed">
               Complete Application ✓
             </button>
           </div>
