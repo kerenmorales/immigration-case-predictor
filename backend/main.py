@@ -210,19 +210,33 @@ except ImportError:
 FORMS_DIR = Path(__file__).parent / "forms"
 
 class SponsorshipData(BaseModel):
-    sponsor_full_name: Optional[str] = None
+    # Sponsor fields (IMM 1344)
+    sponsor_family_name: Optional[str] = None
+    sponsor_given_name: Optional[str] = None
     sponsor_dob: Optional[str] = None
+    sponsor_sex: Optional[str] = None
+    sponsor_country_birth: Optional[str] = None
     sponsor_citizenship: Optional[str] = None
-    sponsor_address: Optional[str] = None
     sponsor_phone: Optional[str] = None
     sponsor_email: Optional[str] = None
-    applicant_full_name: Optional[str] = None
+    sponsor_street: Optional[str] = None
+    sponsor_city: Optional[str] = None
+    sponsor_province: Optional[str] = None
+    sponsor_postal: Optional[str] = None
+    # Applicant fields (IMM 0008)
+    applicant_family_name: Optional[str] = None
+    applicant_given_name: Optional[str] = None
     applicant_dob: Optional[str] = None
+    applicant_sex: Optional[str] = None
+    applicant_country_birth: Optional[str] = None
     applicant_citizenship: Optional[str] = None
     applicant_passport: Optional[str] = None
-    applicant_address: Optional[str] = None
+    applicant_passport_expiry: Optional[str] = None
+    applicant_marital: Optional[str] = None
     applicant_phone: Optional[str] = None
     applicant_email: Optional[str] = None
+    applicant_address: Optional[str] = None
+    # Relationship fields (IMM 5532)
     marriage_date: Optional[str] = None
     marriage_location: Optional[str] = None
     first_met_date: Optional[str] = None
@@ -266,39 +280,51 @@ async def fill_sponsorship_forms(data: SponsorshipData):
     data_dict = data.dict()
     
     # Form field mappings (PDF field name -> data key)
+    # Note: PDF field names need to match actual form fields - these are placeholders
     form_configs = {
         "IMM1344_filled.pdf": {
             "input": FORMS_DIR / "IMM1344_blank.pdf",
             "mapping": {
-                "sponsor_name": "sponsor_full_name",
-                "sponsor_dob": "sponsor_dob", 
-                "sponsor_citizenship": "sponsor_citizenship",
-                "sponsor_address": "sponsor_address",
-                "sponsor_phone": "sponsor_phone",
-                "sponsor_email": "sponsor_email",
+                "FamilyName": "sponsor_family_name",
+                "GivenName": "sponsor_given_name",
+                "DOB": "sponsor_dob",
+                "Sex": "sponsor_sex",
+                "CountryOfBirth": "sponsor_country_birth",
+                "Citizenship": "sponsor_citizenship",
+                "Phone": "sponsor_phone",
+                "Email": "sponsor_email",
+                "StreetAddress": "sponsor_street",
+                "City": "sponsor_city",
+                "Province": "sponsor_province",
+                "PostalCode": "sponsor_postal",
             }
         },
         "IMM0008_filled.pdf": {
             "input": FORMS_DIR / "IMM0008_blank.pdf",
             "mapping": {
-                "applicant_name": "applicant_full_name",
-                "applicant_dob": "applicant_dob",
-                "applicant_citizenship": "applicant_citizenship",
-                "applicant_passport": "applicant_passport",
-                "applicant_address": "applicant_address",
-                "applicant_phone": "applicant_phone",
-                "applicant_email": "applicant_email",
+                "FamilyName": "applicant_family_name",
+                "GivenName": "applicant_given_name",
+                "DOB": "applicant_dob",
+                "Sex": "applicant_sex",
+                "CountryOfBirth": "applicant_country_birth",
+                "Citizenship": "applicant_citizenship",
+                "PassportNumber": "applicant_passport",
+                "PassportExpiry": "applicant_passport_expiry",
+                "MaritalStatus": "applicant_marital",
+                "Phone": "applicant_phone",
+                "Email": "applicant_email",
+                "Address": "applicant_address",
             }
         },
         "IMM5532_filled.pdf": {
             "input": FORMS_DIR / "IMM5532_blank.pdf",
             "mapping": {
-                "marriage_date": "marriage_date",
-                "marriage_location": "marriage_location",
-                "first_met_date": "first_met_date",
-                "first_met_location": "first_met_location",
-                "relationship_start": "relationship_start",
-                "living_together": "living_together",
+                "MarriageDate": "marriage_date",
+                "MarriageLocation": "marriage_location",
+                "FirstMetDate": "first_met_date",
+                "FirstMetLocation": "first_met_location",
+                "RelationshipStart": "relationship_start",
+                "LivingTogether": "living_together",
             }
         }
     }

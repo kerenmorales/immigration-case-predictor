@@ -186,13 +186,15 @@ function SponsorshipAssistant() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-gray-50 p-4 rounded-lg">
               <h4 className="font-medium text-indigo-600 mb-2">Sponsor</h4>
-              <p className="text-sm">{formData.sponsor_full_name}</p>
+              <p className="text-sm">{formData.sponsor_family_name}, {formData.sponsor_given_name}</p>
               <p className="text-sm text-gray-500">{formData.sponsor_email}</p>
+              <p className="text-sm text-gray-500">{formData.sponsor_city}, {formData.sponsor_province}</p>
             </div>
             <div className="bg-gray-50 p-4 rounded-lg">
               <h4 className="font-medium text-indigo-600 mb-2">Applicant</h4>
-              <p className="text-sm">{formData.applicant_full_name}</p>
+              <p className="text-sm">{formData.applicant_family_name}, {formData.applicant_given_name}</p>
               <p className="text-sm text-gray-500">{formData.applicant_citizenship}</p>
+              <p className="text-sm text-gray-500">Passport: {formData.applicant_passport}</p>
             </div>
             <div className="bg-gray-50 p-4 rounded-lg">
               <h4 className="font-medium text-indigo-600 mb-2">Relationship</h4>
@@ -238,12 +240,29 @@ function SponsorshipAssistant() {
           <h3 className="text-lg font-semibold mb-4">Sponsor Information (IMM 1344)</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Full Legal Name *</label>
-              <input type="text" value={formData.sponsor_full_name || ''} onChange={(e) => updateField('sponsor_full_name', e.target.value)} className="w-full border rounded-md p-2" placeholder="As shown on ID" required />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Family Name (Surname) *</label>
+              <input type="text" value={formData.sponsor_family_name || ''} onChange={(e) => updateField('sponsor_family_name', e.target.value)} className="w-full border rounded-md p-2" placeholder="e.g., Smith" required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Given Name(s) *</label>
+              <input type="text" value={formData.sponsor_given_name || ''} onChange={(e) => updateField('sponsor_given_name', e.target.value)} className="w-full border rounded-md p-2" placeholder="e.g., John Michael" required />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Date of Birth *</label>
               <input type="date" value={formData.sponsor_dob || ''} onChange={(e) => updateField('sponsor_dob', e.target.value)} className="w-full border rounded-md p-2" required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Sex *</label>
+              <select value={formData.sponsor_sex || ''} onChange={(e) => updateField('sponsor_sex', e.target.value)} className="w-full border rounded-md p-2" required>
+                <option value="">Select...</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="X">Another gender (X)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Country of Birth *</label>
+              <input type="text" value={formData.sponsor_country_birth || ''} onChange={(e) => updateField('sponsor_country_birth', e.target.value)} className="w-full border rounded-md p-2" placeholder="e.g., Canada" required />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Citizenship Status *</label>
@@ -257,13 +276,40 @@ function SponsorshipAssistant() {
               <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
               <input type="tel" value={formData.sponsor_phone || ''} onChange={(e) => updateField('sponsor_phone', e.target.value)} className="w-full border rounded-md p-2" placeholder="(123) 456-7890" required />
             </div>
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Residential Address *</label>
-              <input type="text" value={formData.sponsor_address || ''} onChange={(e) => updateField('sponsor_address', e.target.value)} className="w-full border rounded-md p-2" placeholder="Street, City, Province, Postal Code" required />
-            </div>
-            <div className="md:col-span-2">
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Email Address *</label>
               <input type="email" value={formData.sponsor_email || ''} onChange={(e) => updateField('sponsor_email', e.target.value)} className="w-full border rounded-md p-2" placeholder="email@example.com" required />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Street Address *</label>
+              <input type="text" value={formData.sponsor_street || ''} onChange={(e) => updateField('sponsor_street', e.target.value)} className="w-full border rounded-md p-2" placeholder="123 Main Street, Apt 4" required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">City *</label>
+              <input type="text" value={formData.sponsor_city || ''} onChange={(e) => updateField('sponsor_city', e.target.value)} className="w-full border rounded-md p-2" required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Province *</label>
+              <select value={formData.sponsor_province || ''} onChange={(e) => updateField('sponsor_province', e.target.value)} className="w-full border rounded-md p-2" required>
+                <option value="">Select...</option>
+                <option value="AB">Alberta</option>
+                <option value="BC">British Columbia</option>
+                <option value="MB">Manitoba</option>
+                <option value="NB">New Brunswick</option>
+                <option value="NL">Newfoundland and Labrador</option>
+                <option value="NS">Nova Scotia</option>
+                <option value="NT">Northwest Territories</option>
+                <option value="NU">Nunavut</option>
+                <option value="ON">Ontario</option>
+                <option value="PE">Prince Edward Island</option>
+                <option value="QC">Quebec</option>
+                <option value="SK">Saskatchewan</option>
+                <option value="YT">Yukon</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Postal Code *</label>
+              <input type="text" value={formData.sponsor_postal || ''} onChange={(e) => updateField('sponsor_postal', e.target.value.toUpperCase())} className="w-full border rounded-md p-2" placeholder="A1A 1A1" maxLength={7} required />
             </div>
           </div>
           <div className="mt-6 flex justify-end">
@@ -280,12 +326,29 @@ function SponsorshipAssistant() {
           <h3 className="text-lg font-semibold mb-4">Applicant Information (IMM 0008)</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Full Legal Name *</label>
-              <input type="text" value={formData.applicant_full_name || ''} onChange={(e) => updateField('applicant_full_name', e.target.value)} className="w-full border rounded-md p-2" placeholder="As shown on passport" required />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Family Name (Surname) *</label>
+              <input type="text" value={formData.applicant_family_name || ''} onChange={(e) => updateField('applicant_family_name', e.target.value)} className="w-full border rounded-md p-2" placeholder="As shown on passport" required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Given Name(s) *</label>
+              <input type="text" value={formData.applicant_given_name || ''} onChange={(e) => updateField('applicant_given_name', e.target.value)} className="w-full border rounded-md p-2" placeholder="As shown on passport" required />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Date of Birth *</label>
               <input type="date" value={formData.applicant_dob || ''} onChange={(e) => updateField('applicant_dob', e.target.value)} className="w-full border rounded-md p-2" required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Sex *</label>
+              <select value={formData.applicant_sex || ''} onChange={(e) => updateField('applicant_sex', e.target.value)} className="w-full border rounded-md p-2" required>
+                <option value="">Select...</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="X">Another gender (X)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Country of Birth *</label>
+              <input type="text" value={formData.applicant_country_birth || ''} onChange={(e) => updateField('applicant_country_birth', e.target.value)} className="w-full border rounded-md p-2" required />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Country of Citizenship *</label>
@@ -293,13 +356,28 @@ function SponsorshipAssistant() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Passport Number *</label>
-              <input type="text" value={formData.applicant_passport || ''} onChange={(e) => updateField('applicant_passport', e.target.value)} className="w-full border rounded-md p-2" placeholder="Passport number" required />
+              <input type="text" value={formData.applicant_passport || ''} onChange={(e) => updateField('applicant_passport', e.target.value)} className="w-full border rounded-md p-2" required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Passport Expiry Date *</label>
+              <input type="date" value={formData.applicant_passport_expiry || ''} onChange={(e) => updateField('applicant_passport_expiry', e.target.value)} className="w-full border rounded-md p-2" required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Marital Status *</label>
+              <select value={formData.applicant_marital || ''} onChange={(e) => updateField('applicant_marital', e.target.value)} className="w-full border rounded-md p-2" required>
+                <option value="">Select...</option>
+                <option value="Married">Married</option>
+                <option value="Common-Law">Common-Law</option>
+                <option value="Single">Single</option>
+                <option value="Divorced">Divorced</option>
+                <option value="Widowed">Widowed</option>
+              </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
               <input type="tel" value={formData.applicant_phone || ''} onChange={(e) => updateField('applicant_phone', e.target.value)} className="w-full border rounded-md p-2" placeholder="Include country code" required />
             </div>
-            <div>
+            <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">Email Address *</label>
               <input type="email" value={formData.applicant_email || ''} onChange={(e) => updateField('applicant_email', e.target.value)} className="w-full border rounded-md p-2" required />
             </div>
