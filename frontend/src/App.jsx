@@ -4,6 +4,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 function App() {
   const [activeTab, setActiveTab] = useState('predictor')
+  const [sponsorshipData, setSponsorshipData] = useState({})
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -29,12 +30,20 @@ function App() {
             >
               Sponsorship Form Assistant
             </button>
+            <button
+              onClick={() => setActiveTab('reports')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'reports' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+            >
+              Form Reports
+            </button>
           </nav>
         </div>
       </div>
 
       <main className="max-w-5xl mx-auto py-8 px-4">
-        {activeTab === 'predictor' ? <CasePredictor /> : <SponsorshipAssistant />}
+        {activeTab === 'predictor' && <CasePredictor />}
+        {activeTab === 'sponsorship' && <SponsorshipAssistant formData={sponsorshipData} setFormData={setSponsorshipData} />}
+        {activeTab === 'reports' && <FormReports formData={sponsorshipData} />}
       </main>
     </div>
   )
@@ -118,9 +127,8 @@ function CasePredictor() {
   )
 }
 
-function SponsorshipAssistant() {
+function SponsorshipAssistant({ formData, setFormData }) {
   const [step, setStep] = useState(0) // 0=start, 1=sponsor, 2=applicant, 3=relationship, 4=complete
-  const [formData, setFormData] = useState({})
   const [downloading, setDownloading] = useState(false)
 
   const updateField = (field, value) => setFormData(prev => ({ ...prev, [field]: value }))
@@ -437,6 +445,159 @@ function SponsorshipAssistant() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function FormReports({ formData }) {
+  const [activeForm, setActiveForm] = useState('imm1344')
+  const hasData = Object.keys(formData).length > 0
+
+  const Field = ({ label, value }) => (
+    <div className="py-2 border-b border-gray-100">
+      <span className="text-gray-500 text-sm">{label}</span>
+      <p className="font-medium">{value || '—'}</p>
+    </div>
+  )
+
+  if (!hasData) {
+    return (
+      <div className="bg-white rounded-lg shadow-md p-8 text-center">
+        <div className="text-6xl mb-4">📋</div>
+        <h2 className="text-xl font-semibold mb-2">No Form Data Yet</h2>
+        <p className="text-gray-600">Complete the Sponsorship Form Assistant to view your form reports here.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      {/* Form Tabs */}
+      <div className="bg-white rounded-lg shadow-md mb-6">
+        <div className="flex border-b">
+          <button
+            onClick={() => setActiveForm('imm1344')}
+            className={`flex-1 py-4 px-4 text-center font-medium ${activeForm === 'imm1344' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50' : 'text-gray-500 hover:bg-gray-50'}`}
+          >
+            IMM 1344<br /><span className="text-xs font-normal">Application to Sponsor</span>
+          </button>
+          <button
+            onClick={() => setActiveForm('imm0008')}
+            className={`flex-1 py-4 px-4 text-center font-medium ${activeForm === 'imm0008' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50' : 'text-gray-500 hover:bg-gray-50'}`}
+          >
+            IMM 0008<br /><span className="text-xs font-normal">Generic Application</span>
+          </button>
+          <button
+            onClick={() => setActiveForm('imm5532')}
+            className={`flex-1 py-4 px-4 text-center font-medium ${activeForm === 'imm5532' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50' : 'text-gray-500 hover:bg-gray-50'}`}
+          >
+            IMM 5532<br /><span className="text-xs font-normal">Relationship Info</span>
+          </button>
+        </div>
+      </div>
+
+      {/* IMM 1344 - Sponsor */}
+      {activeForm === 'imm1344' && (
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-xl font-bold text-gray-800">IMM 1344 - Application to Sponsor</h2>
+              <p className="text-sm text-gray-500">Sponsorship Agreement and Undertaking</p>
+            </div>
+            <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-sm font-medium">🍁 IRCC</span>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
+            <div>
+              <h3 className="font-semibold text-indigo-600 mb-3 mt-4">Personal Information</h3>
+              <Field label="Family Name (Surname)" value={formData.sponsor_family_name} />
+              <Field label="Given Name(s)" value={formData.sponsor_given_name} />
+              <Field label="Date of Birth" value={formData.sponsor_dob} />
+              <Field label="Sex" value={formData.sponsor_sex} />
+              <Field label="Country of Birth" value={formData.sponsor_country_birth} />
+              <Field label="Citizenship Status" value={formData.sponsor_citizenship} />
+            </div>
+            <div>
+              <h3 className="font-semibold text-indigo-600 mb-3 mt-4">Contact Information</h3>
+              <Field label="Phone Number" value={formData.sponsor_phone} />
+              <Field label="Email Address" value={formData.sponsor_email} />
+              <Field label="Street Address" value={formData.sponsor_street} />
+              <Field label="City" value={formData.sponsor_city} />
+              <Field label="Province/Territory" value={formData.sponsor_province} />
+              <Field label="Postal Code" value={formData.sponsor_postal} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* IMM 0008 - Applicant */}
+      {activeForm === 'imm0008' && (
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-xl font-bold text-gray-800">IMM 0008 - Generic Application Form</h2>
+              <p className="text-sm text-gray-500">Principal Applicant Information</p>
+            </div>
+            <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-sm font-medium">🍁 IRCC</span>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
+            <div>
+              <h3 className="font-semibold text-indigo-600 mb-3 mt-4">Personal Details</h3>
+              <Field label="Family Name (Surname)" value={formData.applicant_family_name} />
+              <Field label="Given Name(s)" value={formData.applicant_given_name} />
+              <Field label="Date of Birth" value={formData.applicant_dob} />
+              <Field label="Sex" value={formData.applicant_sex} />
+              <Field label="Country of Birth" value={formData.applicant_country_birth} />
+              <Field label="Country of Citizenship" value={formData.applicant_citizenship} />
+              <Field label="Marital Status" value={formData.applicant_marital} />
+            </div>
+            <div>
+              <h3 className="font-semibold text-indigo-600 mb-3 mt-4">Passport & Contact</h3>
+              <Field label="Passport Number" value={formData.applicant_passport} />
+              <Field label="Passport Expiry Date" value={formData.applicant_passport_expiry} />
+              <Field label="Phone Number" value={formData.applicant_phone} />
+              <Field label="Email Address" value={formData.applicant_email} />
+              <Field label="Current Address" value={formData.applicant_address} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* IMM 5532 - Relationship */}
+      {activeForm === 'imm5532' && (
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-xl font-bold text-gray-800">IMM 5532 - Relationship Information</h2>
+              <p className="text-sm text-gray-500">Spouse/Common-Law Partner Questionnaire</p>
+            </div>
+            <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-sm font-medium">🍁 IRCC</span>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
+            <div>
+              <h3 className="font-semibold text-indigo-600 mb-3 mt-4">Marriage Details</h3>
+              <Field label="Date of Marriage" value={formData.marriage_date} />
+              <Field label="Place of Marriage" value={formData.marriage_location} />
+              <Field label="Currently Living Together" value={formData.living_together} />
+            </div>
+            <div>
+              <h3 className="font-semibold text-indigo-600 mb-3 mt-4">How You Met</h3>
+              <Field label="Date You First Met" value={formData.first_met_date} />
+              <Field label="Where You First Met" value={formData.first_met_location} />
+              <Field label="Relationship Start Date" value={formData.relationship_start} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Print/Download Note */}
+      <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+        <p className="text-sm text-yellow-800">
+          <strong>Note:</strong> Use the "Download Summary PDF" button in the Sponsorship Form Assistant tab to get a printable version of all forms.
+        </p>
+      </div>
     </div>
   )
 }
