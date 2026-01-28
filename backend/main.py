@@ -194,20 +194,25 @@ async def health_check():
     }
 
 
-# ============== Sponsorship Form PDF Filling ==============
+# ============== Sponsorship Form PDF Generation ==============
 
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 from pathlib import Path
 import tempfile
-import zipfile
+import io
+from datetime import datetime
 
+# Use reportlab to generate PDFs (IRCC forms are XFA which can't be filled programmatically)
 try:
-    from pypdf import PdfReader, PdfWriter
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib import colors
     PDF_SUPPORT = True
 except ImportError:
     PDF_SUPPORT = False
 
-FORMS_DIR = Path(__file__).parent / "forms"
 
 class SponsorshipData(BaseModel):
     # Sponsor fields (IMM 1344)
@@ -245,111 +250,116 @@ class SponsorshipData(BaseModel):
     living_together: Optional[str] = None
 
 
-def fill_pdf(input_path: Path, data: dict, field_mapping: dict) -> bytes:
-    """Fill a PDF form and return the bytes."""
-    reader = PdfReader(input_path)
-    writer = PdfWriter()
-    writer.append(reader)
+def generate_sponsorship_pdf(data: dict) -> bytes:
+    """Generate a summary PDF with all sponsorship data."""
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
+    styles = getSampleStyleSheet()
     
-    # Map data to form fields
-    form_data = {}
-    for pdf_field, data_key in field_mapping.items():
-        if data_key in data and data[data_key]:
-            form_data[pdf_field] = data[data_key]
+    # Custom styles
+    title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=18, spaceAfter=20, textColor=colors.HexColor('#4F46E5'))
+    section_style = ParagraphStyle('Section', parent=styles['Heading2'], fontSize=14, spaceBefore=15, spaceAfter=10, textColor=colors.HexColor('#1F2937'))
     
-    # Try to fill form fields
-    if len(writer.pages) > 0:
-        try:
-            writer.update_page_form_field_values(writer.pages[0], form_data)
-        except:
-            pass  # Some PDFs may not have fillable fields
+    story = []
     
-    # Write to bytes
-    import io
-    output = io.BytesIO()
-    writer.write(output)
-    return output.getvalue()
+    # Title
+    story.append(Paragraph("🇨🇦 Spousal Sponsorship Application Summary", title_style))
+    story.append(Paragraph(f"Generated: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}", styles['Normal']))
+    story.append(Spacer(1, 20))
+    
+    # Helper to create data table
+    def make_table(rows):
+        table = Table(rows, colWidths=[2.5*inch, 4*inch])
+        table.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ]))
+        return table
+    
+    # Sponsor Section (IMM 1344)
+    story.append(Paragraph("Sponsor Information (IMM 1344)", section_style))
+    sponsor_rows = [
+        ["Family Name:", data.get('sponsor_family_name', '') or '—'],
+        ["Given Name(s):", data.get('sponsor_given_name', '') or '—'],
+        ["Date of Birth:", data.get('sponsor_dob', '') or '—'],
+        ["Sex:", data.get('sponsor_sex', '') or '—'],
+        ["Country of Birth:", data.get('sponsor_country_birth', '') or '—'],
+        ["Citizenship Status:", data.get('sponsor_citizenship', '') or '—'],
+        ["Phone:", data.get('sponsor_phone', '') or '—'],
+        ["Email:", data.get('sponsor_email', '') or '—'],
+        ["Street Address:", data.get('sponsor_street', '') or '—'],
+        ["City:", data.get('sponsor_city', '') or '—'],
+        ["Province:", data.get('sponsor_province', '') or '—'],
+        ["Postal Code:", data.get('sponsor_postal', '') or '—'],
+    ]
+    story.append(make_table(sponsor_rows))
+    story.append(Spacer(1, 15))
+    
+    # Applicant Section (IMM 0008)
+    story.append(Paragraph("Applicant Information (IMM 0008)", section_style))
+    applicant_rows = [
+        ["Family Name:", data.get('applicant_family_name', '') or '—'],
+        ["Given Name(s):", data.get('applicant_given_name', '') or '—'],
+        ["Date of Birth:", data.get('applicant_dob', '') or '—'],
+        ["Sex:", data.get('applicant_sex', '') or '—'],
+        ["Country of Birth:", data.get('applicant_country_birth', '') or '—'],
+        ["Country of Citizenship:", data.get('applicant_citizenship', '') or '—'],
+        ["Passport Number:", data.get('applicant_passport', '') or '—'],
+        ["Passport Expiry:", data.get('applicant_passport_expiry', '') or '—'],
+        ["Marital Status:", data.get('applicant_marital', '') or '—'],
+        ["Phone:", data.get('applicant_phone', '') or '—'],
+        ["Email:", data.get('applicant_email', '') or '—'],
+        ["Current Address:", data.get('applicant_address', '') or '—'],
+    ]
+    story.append(make_table(applicant_rows))
+    story.append(Spacer(1, 15))
+    
+    # Relationship Section (IMM 5532)
+    story.append(Paragraph("Relationship Information (IMM 5532)", section_style))
+    relationship_rows = [
+        ["Marriage Date:", data.get('marriage_date', '') or '—'],
+        ["Marriage Location:", data.get('marriage_location', '') or '—'],
+        ["Date First Met:", data.get('first_met_date', '') or '—'],
+        ["Where First Met:", data.get('first_met_location', '') or '—'],
+        ["Relationship Start:", data.get('relationship_start', '') or '—'],
+        ["Living Together:", data.get('living_together', '') or '—'],
+    ]
+    story.append(make_table(relationship_rows))
+    story.append(Spacer(1, 30))
+    
+    # Disclaimer
+    disclaimer_style = ParagraphStyle('Disclaimer', parent=styles['Normal'], fontSize=9, textColor=colors.gray)
+    story.append(Paragraph(
+        "<b>Note:</b> This is a summary document for your records. You must still complete the official IRCC forms "
+        "(IMM 1344, IMM 0008, IMM 5532) available at canada.ca/immigration. Use this summary to transfer your information to those forms.",
+        disclaimer_style
+    ))
+    
+    doc.build(story)
+    return buffer.getvalue()
 
 
 @app.post("/api/fill-forms")
 async def fill_sponsorship_forms(data: SponsorshipData):
-    """Fill all sponsorship forms and return as a zip file."""
+    """Generate a summary PDF with all sponsorship data."""
     if not PDF_SUPPORT:
-        raise HTTPException(status_code=500, detail="PDF support not available")
+        raise HTTPException(status_code=500, detail="PDF support not available. Install reportlab.")
     
-    data_dict = data.dict()
-    
-    # Form field mappings (PDF field name -> data key)
-    # Note: PDF field names need to match actual form fields - these are placeholders
-    form_configs = {
-        "IMM1344_filled.pdf": {
-            "input": FORMS_DIR / "IMM1344_blank.pdf",
-            "mapping": {
-                "FamilyName": "sponsor_family_name",
-                "GivenName": "sponsor_given_name",
-                "DOB": "sponsor_dob",
-                "Sex": "sponsor_sex",
-                "CountryOfBirth": "sponsor_country_birth",
-                "Citizenship": "sponsor_citizenship",
-                "Phone": "sponsor_phone",
-                "Email": "sponsor_email",
-                "StreetAddress": "sponsor_street",
-                "City": "sponsor_city",
-                "Province": "sponsor_province",
-                "PostalCode": "sponsor_postal",
-            }
-        },
-        "IMM0008_filled.pdf": {
-            "input": FORMS_DIR / "IMM0008_blank.pdf",
-            "mapping": {
-                "FamilyName": "applicant_family_name",
-                "GivenName": "applicant_given_name",
-                "DOB": "applicant_dob",
-                "Sex": "applicant_sex",
-                "CountryOfBirth": "applicant_country_birth",
-                "Citizenship": "applicant_citizenship",
-                "PassportNumber": "applicant_passport",
-                "PassportExpiry": "applicant_passport_expiry",
-                "MaritalStatus": "applicant_marital",
-                "Phone": "applicant_phone",
-                "Email": "applicant_email",
-                "Address": "applicant_address",
-            }
-        },
-        "IMM5532_filled.pdf": {
-            "input": FORMS_DIR / "IMM5532_blank.pdf",
-            "mapping": {
-                "MarriageDate": "marriage_date",
-                "MarriageLocation": "marriage_location",
-                "FirstMetDate": "first_met_date",
-                "FirstMetLocation": "first_met_location",
-                "RelationshipStart": "relationship_start",
-                "LivingTogether": "living_together",
-            }
-        }
-    }
-    
-    # Create zip file with filled PDFs
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as tmp:
-        with zipfile.ZipFile(tmp.name, 'w') as zf:
-            for output_name, config in form_configs.items():
-                if config["input"].exists():
-                    try:
-                        pdf_bytes = fill_pdf(config["input"], data_dict, config["mapping"])
-                        zf.writestr(output_name, pdf_bytes)
-                    except Exception as e:
-                        print(f"Error filling {output_name}: {e}")
-        
-        return FileResponse(
-            tmp.name,
-            media_type="application/zip",
-            filename="sponsorship_forms.zip"
+    try:
+        pdf_bytes = generate_sponsorship_pdf(data.dict())
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": "attachment; filename=sponsorship_summary.pdf"}
         )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
 
 
 @app.get("/api/forms-available")
 async def check_forms():
-    """Check which blank forms are available."""
-    forms = ["IMM1344_blank.pdf", "IMM0008_blank.pdf", "IMM5532_blank.pdf"]
-    available = {f: (FORMS_DIR / f).exists() for f in forms}
-    return {"pdf_support": PDF_SUPPORT, "forms": available}
+    """Check PDF generation capability."""
+    return {"pdf_support": PDF_SUPPORT, "type": "summary_pdf"}

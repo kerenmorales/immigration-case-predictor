@@ -133,12 +133,12 @@ function SponsorshipAssistant() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
       })
-      if (!response.ok) throw new Error('Failed to generate PDFs')
+      if (!response.ok) throw new Error('Failed to generate PDF')
       const blob = await response.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = 'sponsorship_forms.zip'
+      a.download = 'sponsorship_summary.pdf'
       a.click()
     } catch (err) {
       alert('Error: ' + err.message)
@@ -206,7 +206,7 @@ function SponsorshipAssistant() {
 
         <div className="flex flex-wrap gap-4 justify-center">
           <button onClick={downloadFilledPDFs} disabled={downloading} className="bg-green-600 text-white px-6 py-3 rounded-full font-medium hover:bg-green-700 disabled:bg-gray-400">
-            {downloading ? 'Generating...' : '📄 Download Filled PDFs'}
+            {downloading ? 'Generating...' : '📄 Download Summary PDF'}
           </button>
           <button onClick={downloadJSON} className="bg-indigo-600 text-white px-6 py-3 rounded-full font-medium hover:bg-indigo-700">
             📋 Download JSON Data
