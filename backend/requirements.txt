@@ -8,5 +8,6 @@ python-multipart
 pydantic
 transformers==4.36.0
 accelerate==0.25.0
+pypdf>=4.0.0
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch

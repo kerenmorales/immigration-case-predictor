@@ -2,13 +2,11 @@ import { useState } from 'react'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
-// Tab navigation
 function App() {
   const [activeTab, setActiveTab] = useState('predictor')
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <header className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-6">
         <div className="max-w-5xl mx-auto px-4">
           <h1 className="text-2xl font-bold">🇨🇦 Immigration Law Assistant</h1>
@@ -16,27 +14,18 @@ function App() {
         </div>
       </header>
 
-      {/* Tabs */}
       <div className="bg-white border-b">
         <div className="max-w-5xl mx-auto px-4">
           <nav className="flex space-x-8">
             <button
               onClick={() => setActiveTab('predictor')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'predictor'
-                  ? 'border-indigo-500 text-indigo-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'predictor' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
             >
               Case Outcome Predictor
             </button>
             <button
               onClick={() => setActiveTab('sponsorship')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'sponsorship'
-                  ? 'border-indigo-500 text-indigo-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'sponsorship' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
             >
               Sponsorship Form Assistant
             </button>
@@ -44,7 +33,6 @@ function App() {
         </div>
       </div>
 
-      {/* Content */}
       <main className="max-w-5xl mx-auto py-8 px-4">
         {activeTab === 'predictor' ? <CasePredictor /> : <SponsorshipAssistant />}
       </main>
@@ -52,7 +40,6 @@ function App() {
   )
 }
 
-// Case Outcome Predictor Component
 function CasePredictor() {
   const [caseText, setCaseText] = useState('')
   const [country, setCountry] = useState('')
@@ -65,32 +52,19 @@ function CasePredictor() {
     e.preventDefault()
     setLoading(true)
     setError(null)
-    
     try {
       const response = await fetch(`${API_URL}/predict`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text: caseText,
-          country_of_origin: country || null,
-          claim_type: claimType || null
-        })
+        body: JSON.stringify({ text: caseText, country_of_origin: country || null, claim_type: claimType || null })
       })
-      
       if (!response.ok) throw new Error('Prediction failed')
-      const data = await response.json()
-      setPrediction(data)
+      setPrediction(await response.json())
     } catch (err) {
       setError(err.message)
     } finally {
       setLoading(false)
     }
-  }
-
-  const getOutcomeColor = (outcome) => {
-    if (outcome === 'Allowed') return 'text-green-600 bg-green-50'
-    if (outcome === 'Dismissed') return 'text-red-600 bg-red-50'
-    return 'text-yellow-600 bg-yellow-50'
   }
 
   return (
@@ -99,41 +73,17 @@ function CasePredictor() {
         <h2 className="text-xl font-semibold mb-4">Predict Case Outcome</h2>
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Case Description / Facts
-            </label>
-            <textarea
-              value={caseText}
-              onChange={(e) => setCaseText(e.target.value)}
-              rows={6}
-              className="w-full border border-gray-300 rounded-md p-3 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-              placeholder="Describe the case facts, grounds for the claim, evidence..."
-              required
-            />
+            <label className="block text-sm font-medium text-gray-700 mb-2">Case Description / Facts</label>
+            <textarea value={caseText} onChange={(e) => setCaseText(e.target.value)} rows={6} className="w-full border border-gray-300 rounded-md p-3 focus:ring-2 focus:ring-indigo-500" placeholder="Describe the case facts..." required />
           </div>
-
           <div className="grid grid-cols-2 gap-4 mb-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Country of Origin
-              </label>
-              <input
-                type="text"
-                value={country}
-                onChange={(e) => setCountry(e.target.value)}
-                className="w-full border border-gray-300 rounded-md p-2"
-                placeholder="e.g., Iran, Nigeria"
-              />
+              <label className="block text-sm font-medium text-gray-700 mb-2">Country of Origin</label>
+              <input type="text" value={country} onChange={(e) => setCountry(e.target.value)} className="w-full border border-gray-300 rounded-md p-2" placeholder="e.g., Iran" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Claim Type
-              </label>
-              <select
-                value={claimType}
-                onChange={(e) => setClaimType(e.target.value)}
-                className="w-full border border-gray-300 rounded-md p-2"
-              >
+              <label className="block text-sm font-medium text-gray-700 mb-2">Claim Type</label>
+              <select value={claimType} onChange={(e) => setClaimType(e.target.value)} className="w-full border border-gray-300 rounded-md p-2">
                 <option value="">Select type...</option>
                 <option value="political">Political persecution</option>
                 <option value="religious">Religious persecution</option>
@@ -142,46 +92,25 @@ function CasePredictor() {
               </select>
             </div>
           </div>
-
-          <button
-            type="submit"
-            disabled={loading || !caseText.trim()}
-            className="w-full bg-indigo-600 text-white py-3 rounded-md font-medium hover:bg-indigo-700 disabled:bg-gray-400"
-          >
+          <button type="submit" disabled={loading || !caseText.trim()} className="w-full bg-indigo-600 text-white py-3 rounded-md font-medium hover:bg-indigo-700 disabled:bg-gray-400">
             {loading ? 'Analyzing...' : 'Predict Outcome'}
           </button>
         </form>
       </div>
-
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-md mb-8">
-          {error}
-        </div>
-      )}
-
+      {error && <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-md mb-8">{error}</div>}
       {prediction && (
         <div className="bg-white rounded-lg shadow-md p-6">
           <h3 className="text-lg font-semibold mb-4">Prediction Results</h3>
-          
-          <div className={`inline-block px-4 py-2 rounded-full font-semibold text-lg mb-6 ${getOutcomeColor(prediction.prediction)}`}>
-            {prediction.prediction}
-          </div>
-          
+          <div className={`inline-block px-4 py-2 rounded-full font-semibold text-lg mb-6 ${prediction.prediction === 'Allowed' ? 'text-green-600 bg-green-50' : 'text-red-600 bg-red-50'}`}>{prediction.prediction}</div>
           <div className="mb-6">
             <p className="text-sm font-medium text-gray-700 mb-2">Confidence</p>
             <div className="w-full bg-gray-200 rounded-full h-4">
-              <div 
-                className="bg-indigo-600 h-4 rounded-full"
-                style={{ width: `${prediction.confidence * 100}%` }}
-              />
+              <div className="bg-indigo-600 h-4 rounded-full" style={{ width: `${prediction.confidence * 100}%` }} />
             </div>
             <p className="text-sm text-gray-600 mt-1">{(prediction.confidence * 100).toFixed(1)}%</p>
           </div>
-
           <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-md">
-            <p className="text-sm text-yellow-800">
-              <strong>Disclaimer:</strong> This is for informational purposes only and should not replace professional legal advice.
-            </p>
+            <p className="text-sm text-yellow-800"><strong>Disclaimer:</strong> For informational purposes only.</p>
           </div>
         </div>
       )}
@@ -189,120 +118,56 @@ function CasePredictor() {
   )
 }
 
-// Sponsorship Form Assistant Component
 function SponsorshipAssistant() {
-  const [started, setStarted] = useState(false)
-  const [messages, setMessages] = useState([])
-  const [currentQuestion, setCurrentQuestion] = useState(null)
-  const [input, setInput] = useState('')
-  const [responses, setResponses] = useState({})
-  const [progress, setProgress] = useState({ current: 0, total: 0 })
-  const [completed, setCompleted] = useState(false)
-  const [showSummary, setShowSummary] = useState(false)
+  const [step, setStep] = useState(0) // 0=start, 1=sponsor, 2=applicant, 3=relationship, 4=complete
+  const [formData, setFormData] = useState({})
+  const [downloading, setDownloading] = useState(false)
 
-  const QUESTIONS = [
-    { section: 'sponsor', id: 'sponsor_full_name', text: "What is the sponsor's full legal name?" },
-    { section: 'sponsor', id: 'sponsor_dob', text: "What is the sponsor's date of birth?" },
-    { section: 'sponsor', id: 'sponsor_citizenship', text: "What is the sponsor's citizenship status? (Canadian Citizen/Permanent Resident)" },
-    { section: 'sponsor', id: 'sponsor_address', text: "What is the sponsor's current residential address?" },
-    { section: 'sponsor', id: 'sponsor_phone', text: "What is the sponsor's phone number?" },
-    { section: 'sponsor', id: 'sponsor_email', text: "What is the sponsor's email address?" },
-    { section: 'applicant', id: 'applicant_full_name', text: "What is the applicant's (spouse) full legal name?" },
-    { section: 'applicant', id: 'applicant_dob', text: "What is the applicant's date of birth?" },
-    { section: 'applicant', id: 'applicant_citizenship', text: "What is the applicant's country of citizenship?" },
-    { section: 'applicant', id: 'applicant_passport', text: "What is the applicant's passport number?" },
-    { section: 'applicant', id: 'applicant_address', text: "What is the applicant's current address?" },
-    { section: 'applicant', id: 'applicant_phone', text: "What is the applicant's phone number?" },
-    { section: 'applicant', id: 'applicant_email', text: "What is the applicant's email address?" },
-    { section: 'relationship', id: 'marriage_date', text: "When did you get married?" },
-    { section: 'relationship', id: 'marriage_location', text: "Where did you get married? (City, Country)" },
-    { section: 'relationship', id: 'first_met_date', text: "When did you first meet?" },
-    { section: 'relationship', id: 'first_met_location', text: "Where did you first meet?" },
-    { section: 'relationship', id: 'relationship_start', text: "When did your relationship begin?" },
-    { section: 'relationship', id: 'living_together', text: "Are you currently living together? (Yes/No)" },
-  ]
+  const updateField = (field, value) => setFormData(prev => ({ ...prev, [field]: value }))
 
-  const startChat = () => {
-    setStarted(true)
-    setMessages([{ type: 'bot', text: "Hi! I'll help you collect information for your IRCC spousal sponsorship application. Let's start with the sponsor information." }])
-    setCurrentQuestion(QUESTIONS[0])
-    setProgress({ current: 0, total: QUESTIONS.length })
-    setTimeout(() => {
-      setMessages(prev => [...prev, { type: 'bot', text: QUESTIONS[0].text }])
-    }, 500)
-  }
-
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    if (!input.trim() || !currentQuestion) return
-
-    const answer = input.trim()
-    setMessages(prev => [...prev, { type: 'user', text: answer }])
-    setResponses(prev => ({ ...prev, [currentQuestion.id]: answer }))
-    setInput('')
-
-    const currentIndex = QUESTIONS.findIndex(q => q.id === currentQuestion.id)
-    const nextIndex = currentIndex + 1
-
-    if (nextIndex >= QUESTIONS.length) {
-      setCompleted(true)
-      setProgress({ current: QUESTIONS.length, total: QUESTIONS.length })
-      setTimeout(() => {
-        setMessages(prev => [...prev, { type: 'bot', text: "Thank you! I've collected all the information. You can now view the summary or download your data." }])
-      }, 500)
-    } else {
-      const nextQuestion = QUESTIONS[nextIndex]
-      setCurrentQuestion(nextQuestion)
-      setProgress({ current: nextIndex, total: QUESTIONS.length })
-
-      // Add section header if changing sections
-      const currentSection = QUESTIONS[currentIndex].section
-      const nextSection = nextQuestion.section
-      
-      setTimeout(() => {
-        if (currentSection !== nextSection) {
-          const sectionNames = { applicant: "Now let's collect the applicant's information.", relationship: "Finally, let's talk about your relationship." }
-          if (sectionNames[nextSection]) {
-            setMessages(prev => [...prev, { type: 'section', text: sectionNames[nextSection] }])
-          }
-        }
-        setMessages(prev => [...prev, { type: 'bot', text: nextQuestion.text }])
-      }, 500)
+  const downloadFilledPDFs = async () => {
+    setDownloading(true)
+    try {
+      const response = await fetch(`${API_URL}/api/fill-forms`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
+      })
+      if (!response.ok) throw new Error('Failed to generate PDFs')
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'sponsorship_forms.zip'
+      a.click()
+    } catch (err) {
+      alert('Error: ' + err.message)
+    } finally {
+      setDownloading(false)
     }
   }
 
-  const downloadData = () => {
-    const data = JSON.stringify({ timestamp: new Date().toISOString(), responses }, null, 2)
-    const blob = new Blob([data], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
+  const downloadJSON = () => {
+    const blob = new Blob([JSON.stringify(formData, null, 2)], { type: 'application/json' })
     const a = document.createElement('a')
-    a.href = url
+    a.href = URL.createObjectURL(blob)
     a.download = 'sponsorship_data.json'
     a.click()
   }
 
-  const startOver = () => {
-    setStarted(false)
-    setMessages([])
-    setCurrentQuestion(null)
-    setResponses({})
-    setProgress({ current: 0, total: 0 })
-    setCompleted(false)
-    setShowSummary(false)
-  }
-
-  if (!started) {
+  // Start screen
+  if (step === 0) {
     return (
       <div className="bg-white rounded-lg shadow-md p-8 text-center">
         <h2 className="text-2xl font-bold mb-4">🇨🇦 Spousal Sponsorship Assistant</h2>
-        <p className="text-gray-600 mb-6">I'll guide you through collecting all the information needed for your IRCC spousal sponsorship application.</p>
+        <p className="text-gray-600 mb-6">Fill out your IRCC spousal sponsorship forms step by step.</p>
         <ul className="text-left inline-block mb-6 text-gray-600">
-          <li className="mb-2">• Sponsor information (IMM 1344)</li>
-          <li className="mb-2">• Applicant information (IMM 0008)</li>
-          <li className="mb-2">• Relationship details (IMM 5532)</li>
+          <li className="mb-2">• IMM 1344 - Application to Sponsor</li>
+          <li className="mb-2">• IMM 0008 - Generic Application Form</li>
+          <li className="mb-2">• IMM 5532 - Relationship Information</li>
         </ul>
         <div>
-          <button onClick={startChat} className="bg-indigo-600 text-white px-8 py-3 rounded-full font-medium hover:bg-indigo-700">
+          <button onClick={() => setStep(1)} className="bg-indigo-600 text-white px-8 py-3 rounded-full font-medium hover:bg-indigo-700">
             Start Application
           </button>
         </div>
@@ -310,78 +175,188 @@ function SponsorshipAssistant() {
     )
   }
 
-  if (showSummary) {
-    const sections = {
-      'Sponsor Information': ['sponsor_full_name', 'sponsor_dob', 'sponsor_citizenship', 'sponsor_address', 'sponsor_phone', 'sponsor_email'],
-      'Applicant Information': ['applicant_full_name', 'applicant_dob', 'applicant_citizenship', 'applicant_passport', 'applicant_address', 'applicant_phone', 'applicant_email'],
-      'Relationship Information': ['marriage_date', 'marriage_location', 'first_met_date', 'first_met_location', 'relationship_start', 'living_together']
-    }
-
+  // Complete screen
+  if (step === 4) {
     return (
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <h2 className="text-xl font-bold mb-6">Application Summary</h2>
-        {Object.entries(sections).map(([sectionName, fields]) => (
-          <div key={sectionName} className="mb-6">
-            <h3 className="text-lg font-semibold text-indigo-600 mb-3 pb-2 border-b">{sectionName}</h3>
-            {fields.map(field => (
-              <div key={field} className="flex py-2 border-b border-gray-100">
-                <span className="font-medium text-gray-600 w-48">{field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}:</span>
-                <span>{responses[field] || '-'}</span>
-              </div>
-            ))}
+      <div className="bg-white rounded-lg shadow-md p-8">
+        <h2 className="text-2xl font-bold mb-6 text-center text-green-600">✓ Application Complete!</h2>
+        
+        <div className="mb-8">
+          <h3 className="text-lg font-semibold mb-4">Summary</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h4 className="font-medium text-indigo-600 mb-2">Sponsor</h4>
+              <p className="text-sm">{formData.sponsor_full_name}</p>
+              <p className="text-sm text-gray-500">{formData.sponsor_email}</p>
+            </div>
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h4 className="font-medium text-indigo-600 mb-2">Applicant</h4>
+              <p className="text-sm">{formData.applicant_full_name}</p>
+              <p className="text-sm text-gray-500">{formData.applicant_citizenship}</p>
+            </div>
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h4 className="font-medium text-indigo-600 mb-2">Relationship</h4>
+              <p className="text-sm">Married: {formData.marriage_date}</p>
+              <p className="text-sm text-gray-500">{formData.marriage_location}</p>
+            </div>
           </div>
-        ))}
-        <div className="flex gap-4 mt-6">
-          <button onClick={() => setShowSummary(false)} className="bg-gray-200 px-6 py-2 rounded-full">Back to Chat</button>
-          <button onClick={downloadData} className="bg-indigo-600 text-white px-6 py-2 rounded-full">Download Data</button>
-          <button onClick={startOver} className="bg-gray-500 text-white px-6 py-2 rounded-full">Start Over</button>
+        </div>
+
+        <div className="flex flex-wrap gap-4 justify-center">
+          <button onClick={downloadFilledPDFs} disabled={downloading} className="bg-green-600 text-white px-6 py-3 rounded-full font-medium hover:bg-green-700 disabled:bg-gray-400">
+            {downloading ? 'Generating...' : '📄 Download Filled PDFs'}
+          </button>
+          <button onClick={downloadJSON} className="bg-indigo-600 text-white px-6 py-3 rounded-full font-medium hover:bg-indigo-700">
+            📋 Download JSON Data
+          </button>
+          <button onClick={() => { setStep(0); setFormData({}) }} className="bg-gray-500 text-white px-6 py-3 rounded-full font-medium hover:bg-gray-600">
+            Start Over
+          </button>
         </div>
       </div>
     )
   }
 
+  // Form steps
   return (
-    <div className="bg-white rounded-lg shadow-md overflow-hidden">
+    <div className="bg-white rounded-lg shadow-md p-6">
       {/* Progress */}
-      <div className="p-4 bg-gray-50 border-b">
-        <div className="w-full bg-gray-200 rounded-full h-2">
-          <div className="bg-indigo-600 h-2 rounded-full transition-all" style={{ width: `${(progress.current / progress.total) * 100}%` }} />
+      <div className="mb-6">
+        <div className="flex justify-between text-sm text-gray-500 mb-2">
+          <span className={step >= 1 ? 'text-indigo-600 font-medium' : ''}>1. Sponsor</span>
+          <span className={step >= 2 ? 'text-indigo-600 font-medium' : ''}>2. Applicant</span>
+          <span className={step >= 3 ? 'text-indigo-600 font-medium' : ''}>3. Relationship</span>
         </div>
-        <p className="text-sm text-gray-500 mt-2 text-center">Question {progress.current} of {progress.total}</p>
+        <div className="w-full bg-gray-200 rounded-full h-2">
+          <div className="bg-indigo-600 h-2 rounded-full transition-all" style={{ width: `${(step / 3) * 100}%` }} />
+        </div>
       </div>
 
-      {/* Chat */}
-      <div className="h-96 overflow-y-auto p-4 space-y-4">
-        {messages.map((msg, i) => (
-          <div key={i} className={`flex ${msg.type === 'user' ? 'justify-end' : msg.type === 'section' ? 'justify-center' : 'justify-start'}`}>
-            {msg.type === 'section' ? (
-              <div className="bg-indigo-50 text-indigo-700 px-4 py-2 rounded-lg text-sm font-medium">{msg.text}</div>
-            ) : (
-              <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl ${msg.type === 'user' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-800'}`}>
-                {msg.text}
-              </div>
-            )}
+      {/* Step 1: Sponsor Info */}
+      {step === 1 && (
+        <div>
+          <h3 className="text-lg font-semibold mb-4">Sponsor Information (IMM 1344)</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Full Legal Name *</label>
+              <input type="text" value={formData.sponsor_full_name || ''} onChange={(e) => updateField('sponsor_full_name', e.target.value)} className="w-full border rounded-md p-2" placeholder="As shown on ID" required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Date of Birth *</label>
+              <input type="date" value={formData.sponsor_dob || ''} onChange={(e) => updateField('sponsor_dob', e.target.value)} className="w-full border rounded-md p-2" required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Citizenship Status *</label>
+              <select value={formData.sponsor_citizenship || ''} onChange={(e) => updateField('sponsor_citizenship', e.target.value)} className="w-full border rounded-md p-2" required>
+                <option value="">Select...</option>
+                <option value="Canadian Citizen">Canadian Citizen</option>
+                <option value="Permanent Resident">Permanent Resident</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
+              <input type="tel" value={formData.sponsor_phone || ''} onChange={(e) => updateField('sponsor_phone', e.target.value)} className="w-full border rounded-md p-2" placeholder="(123) 456-7890" required />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Residential Address *</label>
+              <input type="text" value={formData.sponsor_address || ''} onChange={(e) => updateField('sponsor_address', e.target.value)} className="w-full border rounded-md p-2" placeholder="Street, City, Province, Postal Code" required />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email Address *</label>
+              <input type="email" value={formData.sponsor_email || ''} onChange={(e) => updateField('sponsor_email', e.target.value)} className="w-full border rounded-md p-2" placeholder="email@example.com" required />
+            </div>
           </div>
-        ))}
-      </div>
+          <div className="mt-6 flex justify-end">
+            <button onClick={() => setStep(2)} className="bg-indigo-600 text-white px-6 py-2 rounded-full hover:bg-indigo-700">
+              Next: Applicant Info →
+            </button>
+          </div>
+        </div>
+      )}
 
-      {/* Input */}
-      {!completed ? (
-        <form onSubmit={handleSubmit} className="p-4 border-t flex gap-2">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Type your answer..."
-            className="flex-1 border border-gray-300 rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-          <button type="submit" className="bg-indigo-600 text-white px-6 py-2 rounded-full hover:bg-indigo-700">Send</button>
-        </form>
-      ) : (
-        <div className="p-4 border-t flex gap-4 justify-center">
-          <button onClick={() => setShowSummary(true)} className="bg-indigo-600 text-white px-6 py-2 rounded-full">View Summary</button>
-          <button onClick={downloadData} className="bg-gray-200 px-6 py-2 rounded-full">Download Data</button>
-          <button onClick={startOver} className="bg-gray-500 text-white px-6 py-2 rounded-full">Start Over</button>
+      {/* Step 2: Applicant Info */}
+      {step === 2 && (
+        <div>
+          <h3 className="text-lg font-semibold mb-4">Applicant Information (IMM 0008)</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Full Legal Name *</label>
+              <input type="text" value={formData.applicant_full_name || ''} onChange={(e) => updateField('applicant_full_name', e.target.value)} className="w-full border rounded-md p-2" placeholder="As shown on passport" required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Date of Birth *</label>
+              <input type="date" value={formData.applicant_dob || ''} onChange={(e) => updateField('applicant_dob', e.target.value)} className="w-full border rounded-md p-2" required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Country of Citizenship *</label>
+              <input type="text" value={formData.applicant_citizenship || ''} onChange={(e) => updateField('applicant_citizenship', e.target.value)} className="w-full border rounded-md p-2" placeholder="e.g., India, Philippines" required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Passport Number *</label>
+              <input type="text" value={formData.applicant_passport || ''} onChange={(e) => updateField('applicant_passport', e.target.value)} className="w-full border rounded-md p-2" placeholder="Passport number" required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
+              <input type="tel" value={formData.applicant_phone || ''} onChange={(e) => updateField('applicant_phone', e.target.value)} className="w-full border rounded-md p-2" placeholder="Include country code" required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email Address *</label>
+              <input type="email" value={formData.applicant_email || ''} onChange={(e) => updateField('applicant_email', e.target.value)} className="w-full border rounded-md p-2" required />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Current Address *</label>
+              <input type="text" value={formData.applicant_address || ''} onChange={(e) => updateField('applicant_address', e.target.value)} className="w-full border rounded-md p-2" placeholder="Full address including country" required />
+            </div>
+          </div>
+          <div className="mt-6 flex justify-between">
+            <button onClick={() => setStep(1)} className="text-gray-600 px-6 py-2 hover:text-gray-800">← Back</button>
+            <button onClick={() => setStep(3)} className="bg-indigo-600 text-white px-6 py-2 rounded-full hover:bg-indigo-700">
+              Next: Relationship →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Step 3: Relationship Info */}
+      {step === 3 && (
+        <div>
+          <h3 className="text-lg font-semibold mb-4">Relationship Information (IMM 5532)</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Marriage Date *</label>
+              <input type="date" value={formData.marriage_date || ''} onChange={(e) => updateField('marriage_date', e.target.value)} className="w-full border rounded-md p-2" required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Marriage Location *</label>
+              <input type="text" value={formData.marriage_location || ''} onChange={(e) => updateField('marriage_location', e.target.value)} className="w-full border rounded-md p-2" placeholder="City, Country" required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Date You First Met *</label>
+              <input type="date" value={formData.first_met_date || ''} onChange={(e) => updateField('first_met_date', e.target.value)} className="w-full border rounded-md p-2" required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Where You First Met *</label>
+              <input type="text" value={formData.first_met_location || ''} onChange={(e) => updateField('first_met_location', e.target.value)} className="w-full border rounded-md p-2" placeholder="City, Country or Online" required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Relationship Start Date *</label>
+              <input type="date" value={formData.relationship_start || ''} onChange={(e) => updateField('relationship_start', e.target.value)} className="w-full border rounded-md p-2" required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Currently Living Together? *</label>
+              <select value={formData.living_together || ''} onChange={(e) => updateField('living_together', e.target.value)} className="w-full border rounded-md p-2" required>
+                <option value="">Select...</option>
+                <option value="Yes">Yes</option>
+                <option value="No">No</option>
+              </select>
+            </div>
+          </div>
+          <div className="mt-6 flex justify-between">
+            <button onClick={() => setStep(2)} className="text-gray-600 px-6 py-2 hover:text-gray-800">← Back</button>
+            <button onClick={() => setStep(4)} className="bg-green-600 text-white px-6 py-2 rounded-full hover:bg-green-700">
+              Complete Application ✓
+            </button>
+          </div>
         </div>
       )}
     </div>

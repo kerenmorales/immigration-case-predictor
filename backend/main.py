@@ -192,3 +192,138 @@ async def health_check():
         "model_type": model_type,
         "gpu_available": torch.cuda.is_available()
     }
+
+
+# ============== Sponsorship Form PDF Filling ==============
+
+from fastapi.responses import FileResponse
+from pathlib import Path
+import tempfile
+import zipfile
+
+try:
+    from pypdf import PdfReader, PdfWriter
+    PDF_SUPPORT = True
+except ImportError:
+    PDF_SUPPORT = False
+
+FORMS_DIR = Path(__file__).parent / "forms"
+
+class SponsorshipData(BaseModel):
+    sponsor_full_name: Optional[str] = None
+    sponsor_dob: Optional[str] = None
+    sponsor_citizenship: Optional[str] = None
+    sponsor_address: Optional[str] = None
+    sponsor_phone: Optional[str] = None
+    sponsor_email: Optional[str] = None
+    applicant_full_name: Optional[str] = None
+    applicant_dob: Optional[str] = None
+    applicant_citizenship: Optional[str] = None
+    applicant_passport: Optional[str] = None
+    applicant_address: Optional[str] = None
+    applicant_phone: Optional[str] = None
+    applicant_email: Optional[str] = None
+    marriage_date: Optional[str] = None
+    marriage_location: Optional[str] = None
+    first_met_date: Optional[str] = None
+    first_met_location: Optional[str] = None
+    relationship_start: Optional[str] = None
+    living_together: Optional[str] = None
+
+
+def fill_pdf(input_path: Path, data: dict, field_mapping: dict) -> bytes:
+    """Fill a PDF form and return the bytes."""
+    reader = PdfReader(input_path)
+    writer = PdfWriter()
+    writer.append(reader)
+    
+    # Map data to form fields
+    form_data = {}
+    for pdf_field, data_key in field_mapping.items():
+        if data_key in data and data[data_key]:
+            form_data[pdf_field] = data[data_key]
+    
+    # Try to fill form fields
+    if len(writer.pages) > 0:
+        try:
+            writer.update_page_form_field_values(writer.pages[0], form_data)
+        except:
+            pass  # Some PDFs may not have fillable fields
+    
+    # Write to bytes
+    import io
+    output = io.BytesIO()
+    writer.write(output)
+    return output.getvalue()
+
+
+@app.post("/api/fill-forms")
+async def fill_sponsorship_forms(data: SponsorshipData):
+    """Fill all sponsorship forms and return as a zip file."""
+    if not PDF_SUPPORT:
+        raise HTTPException(status_code=500, detail="PDF support not available")
+    
+    data_dict = data.dict()
+    
+    # Form field mappings (PDF field name -> data key)
+    form_configs = {
+        "IMM1344_filled.pdf": {
+            "input": FORMS_DIR / "IMM1344_blank.pdf",
+            "mapping": {
+                "sponsor_name": "sponsor_full_name",
+                "sponsor_dob": "sponsor_dob", 
+                "sponsor_citizenship": "sponsor_citizenship",
+                "sponsor_address": "sponsor_address",
+                "sponsor_phone": "sponsor_phone",
+                "sponsor_email": "sponsor_email",
+            }
+        },
+        "IMM0008_filled.pdf": {
+            "input": FORMS_DIR / "IMM0008_blank.pdf",
+            "mapping": {
+                "applicant_name": "applicant_full_name",
+                "applicant_dob": "applicant_dob",
+                "applicant_citizenship": "applicant_citizenship",
+                "applicant_passport": "applicant_passport",
+                "applicant_address": "applicant_address",
+                "applicant_phone": "applicant_phone",
+                "applicant_email": "applicant_email",
+            }
+        },
+        "IMM5532_filled.pdf": {
+            "input": FORMS_DIR / "IMM5532_blank.pdf",
+            "mapping": {
+                "marriage_date": "marriage_date",
+                "marriage_location": "marriage_location",
+                "first_met_date": "first_met_date",
+                "first_met_location": "first_met_location",
+                "relationship_start": "relationship_start",
+                "living_together": "living_together",
+            }
+        }
+    }
+    
+    # Create zip file with filled PDFs
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as tmp:
+        with zipfile.ZipFile(tmp.name, 'w') as zf:
+            for output_name, config in form_configs.items():
+                if config["input"].exists():
+                    try:
+                        pdf_bytes = fill_pdf(config["input"], data_dict, config["mapping"])
+                        zf.writestr(output_name, pdf_bytes)
+                    except Exception as e:
+                        print(f"Error filling {output_name}: {e}")
+        
+        return FileResponse(
+            tmp.name,
+            media_type="application/zip",
+            filename="sponsorship_forms.zip"
+        )
+
+
+@app.get("/api/forms-available")
+async def check_forms():
+    """Check which blank forms are available."""
+    forms = ["IMM1344_blank.pdf", "IMM0008_blank.pdf", "IMM5532_blank.pdf"]
+    available = {f: (FORMS_DIR / f).exists() for f in forms}
+    return {"pdf_support": PDF_SUPPORT, "forms": available}
