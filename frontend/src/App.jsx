@@ -140,20 +140,26 @@ function SponsorshipAssistant({ formData, setFormData }) {
   const downloadFilledPDFs = async () => {
     setDownloading(true)
     try {
+      console.log('Fetching from:', `${API_URL}/api/fill-forms`)
       const response = await fetch(`${API_URL}/api/fill-forms`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
       })
-      if (!response.ok) throw new Error('Failed to generate PDF')
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`HTTP ${response.status}: ${errorText}`)
+      }
       const blob = await response.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
       a.download = 'sponsorship_summary.pdf'
       a.click()
+      URL.revokeObjectURL(url)
     } catch (err) {
-      alert('Error: ' + err.message)
+      console.error('PDF download error:', err)
+      alert('Error downloading PDF: ' + err.message + '\n\nAPI URL: ' + API_URL)
     } finally {
       setDownloading(false)
     }
