@@ -1,6 +1,10 @@
 import { useState } from 'react'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+// Use environment variable, or detect Railway production, or fallback to localhost
+const API_URL = import.meta.env.VITE_API_URL || 
+  (window.location.hostname.includes('railway.app') 
+    ? 'https://immigration-case-predictor-production.up.railway.app' 
+    : 'http://localhost:8000')
 
 function App() {
   const [activeTab, setActiveTab] = useState('predictor')
