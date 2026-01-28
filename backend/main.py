@@ -353,7 +353,11 @@ async def fill_sponsorship_forms(data: SponsorshipData):
         return Response(
             content=pdf_bytes,
             media_type="application/pdf",
-            headers={"Content-Disposition": "attachment; filename=sponsorship_summary.pdf"}
+            headers={
+                "Content-Disposition": "attachment; filename=sponsorship_summary.pdf",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Expose-Headers": "Content-Disposition"
+            }
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
