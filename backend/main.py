@@ -150,8 +150,36 @@ async def predict_outcome(case: CaseInput):
             detail="Model not loaded. Run train_transformer.py first."
         )
     
+    # Input validation
+    text = case.text.strip()
+    
+    # Check minimum length
+    if len(text) < 50:
+        raise HTTPException(
+            status_code=400,
+            detail="Please provide more detail. Case descriptions should be at least 50 characters to generate a meaningful prediction."
+        )
+    
+    # Check for immigration-related keywords
+    immigration_keywords = [
+        'refugee', 'asylum', 'immigration', 'irb', 'rpd', 'rad', 'federal court',
+        'persecution', 'protection', 'deportation', 'removal', 'visa', 'permit',
+        'sponsor', 'citizenship', 'permanent resident', 'claimant', 'applicant',
+        'minister', 'ircc', 'cbsa', 'humanitarian', 'country of origin', 'fear',
+        'claim', 'appeal', 'judicial review', 'convention', 'torture', 'risk',
+        'inadmissible', 'admissible', 'prra', 'h&c', 'humanitarian and compassionate'
+    ]
+    text_lower = text.lower()
+    has_immigration_context = any(kw in text_lower for kw in immigration_keywords)
+    
+    if not has_immigration_context:
+        raise HTTPException(
+            status_code=400,
+            detail="This doesn't appear to be an immigration case. Please include relevant details about the refugee claim, immigration application, or judicial review."
+        )
+    
     # Combine all input into text
-    full_text = case.text
+    full_text = text
     if case.country_of_origin:
         full_text += f" Country of origin: {case.country_of_origin}."
     if case.claim_type:
