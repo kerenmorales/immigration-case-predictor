@@ -116,6 +116,9 @@ def get_risk_assessment(prediction: str, confidence: float) -> tuple:
         level = "Low"
         desc = "This case could go either way. The model found mixed signals - careful preparation and strong evidence will be crucial."
     return level, desc
+
+
+def predict_transformer(text: str):
     """Make prediction using transformer model."""
     inputs = tokenizer(
         text,
