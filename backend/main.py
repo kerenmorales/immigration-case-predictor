@@ -1,6 +1,7 @@
 """
 FastAPI backend for the Immigration Case Outcome Predictor.
 Supports both sklearn and transformer models.
+v2.1 - Added enhanced prediction response with risk assessment
 """
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
