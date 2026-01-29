@@ -598,7 +598,7 @@ function SponsorshipAssistant({ formData, setFormData, user }) {
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(null)
   const [chatMessages, setChatMessages] = useState([
-    { role: 'assistant', content: 'Hello! I\'m here to help you with your spousal sponsorship application. You can ask me questions about the process, required documents, eligibility, or anything else related to Canadian immigration sponsorship.' }
+    { role: 'assistant', content: 'Hello! I\'ll help you fill out your sponsorship forms. Just tell me the information naturally and I\'ll format it correctly for IRCC.\n\nFor example, say:\n"The sponsor is John Michael Smith, born March 15, 1985 in Toronto, Canada"\n\nI\'ll extract and format: Family Name: SMITH, Given Name(s): John Michael, DOB: 1985-03-15' }
   ])
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
@@ -615,13 +615,19 @@ function SponsorshipAssistant({ formData, setFormData, user }) {
     setChatLoading(true)
 
     try {
-      const response = await fetch(`${API_URL}/chat`, {
+      const response = await fetch(`${API_URL}/chat-form-fill`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMessage, context: 'sponsorship' })
+        body: JSON.stringify({ message: userMessage, current_data: formData })
       })
       if (!response.ok) throw new Error('Failed to get response')
       const data = await response.json()
+      
+      // Update form fields if extracted
+      if (data.extracted_fields && Object.keys(data.extracted_fields).length > 0) {
+        setFormData(prev => ({ ...prev, ...data.extracted_fields }))
+      }
+      
       setChatMessages(prev => [...prev, { role: 'assistant', content: data.response }])
     } catch (err) {
       setChatMessages(prev => [...prev, { role: 'assistant', content: 'Sorry, I encountered an error. Please try again.' }])
@@ -777,28 +783,30 @@ function SponsorshipAssistant({ formData, setFormData, user }) {
           </div>
           <div className="space-y-6">
             <div className="bg-white rounded-xl border border-slate-200 p-6">
-              <h3 className="font-semibold text-slate-800 mb-3">Quick Questions</h3>
+              <h3 className="font-semibold text-slate-800 mb-3">Example Inputs</h3>
               <div className="space-y-2">
                 {[
-                  'What documents do I need?',
-                  'How long does sponsorship take?',
-                  'What are the eligibility requirements?',
-                  'Can I work while waiting?'
+                  'Sponsor: Maria Garcia, born Jan 5 1990 in Mexico City',
+                  'Applicant is Ahmed Hassan, DOB December 12, 1988, from Egypt',
+                  'We got married on June 15, 2023 in Vancouver',
+                  'Sponsor email: maria@email.com, phone 416-555-1234'
                 ].map((q, i) => (
                   <button
                     key={i}
                     onClick={() => setChatInput(q)}
                     className="w-full text-left text-sm text-slate-600 hover:text-red-600 hover:bg-slate-50 px-3 py-2 rounded-lg transition-colors"
                   >
-                    {q}
+                    "{q}"
                   </button>
                 ))}
               </div>
             </div>
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
-              <h3 className="font-semibold text-blue-800 mb-2">Need Help?</h3>
-              <p className="text-sm text-blue-700">
-                Use the Form Wizard to fill out your application step by step, or ask questions here first.
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-6">
+              <h3 className="font-semibold text-amber-800 mb-2">IRCC Format</h3>
+              <p className="text-sm text-amber-700">
+                Names: Family name in CAPS, given names separate<br/>
+                Dates: YYYY-MM-DD format<br/>
+                Phone: +1 (XXX) XXX-XXXX
               </p>
             </div>
           </div>

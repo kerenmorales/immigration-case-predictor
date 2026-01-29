@@ -519,172 +519,225 @@ class ChatInput(BaseModel):
     context: Optional[str] = None
 
 
-SPONSORSHIP_FAQ = {
-    "documents": """For a spousal sponsorship application, you'll need:
-
-**Sponsor (Canadian citizen/PR):**
-• Proof of status (citizenship certificate, PR card, or passport)
-• Income documents (NOA, T4s, employment letter)
-• Proof of relationship (photos, communication records, joint accounts)
-
-**Applicant (spouse):**
-• Valid passport
-• Birth certificate
-• Police certificates from all countries lived in 6+ months since age 18
-• Medical exam results (from IRCC-approved doctor)
-• Marriage certificate
-• Photos together with dates
-
-**Relationship proof:**
-• Photos together (with dates/locations)
-• Communication records (chat logs, call history)
-• Travel records showing visits
-• Joint financial documents if applicable
-• Letters from family/friends confirming relationship""",
-
-    "timeline": """Current processing times for spousal sponsorship:
-
-**Inland applications (spouse in Canada):** 12-18 months
-**Outland applications (spouse outside Canada):** 12-15 months
-
-Key stages:
-1. **Acknowledgment of Receipt (AOR):** 2-4 weeks after submission
-2. **Eligibility decision:** 3-6 months
-3. **Background checks:** Varies by country
-4. **Medical request:** After eligibility approved
-5. **Final decision:** After all checks complete
-
-Note: Processing times vary and can change. Check IRCC website for current estimates.""",
-
-    "eligibility": """**Sponsor eligibility requirements:**
-• Must be a Canadian citizen or permanent resident
-• Must be 18 years or older
-• Must not be in prison, bankrupt, or under a removal order
-• Must not have sponsored a spouse in the past 5 years (if that relationship ended)
-• Must not have been sponsored as a spouse yourself in the past 5 years
-• Must sign an undertaking to financially support your spouse for 3 years
-
-**Applicant eligibility:**
-• Must be legally married to the sponsor OR
-• Must be in a common-law relationship (12+ months cohabitation) OR
-• Must be in a conjugal relationship (if marriage/cohabitation not possible)
-• Must pass medical and security checks
-• Must not be inadmissible to Canada""",
-
-    "work": """**Can the applicant work while waiting?**
-
-**Inland applications (spouse in Canada):**
-• Can apply for an Open Work Permit (OWP) at the same time as sponsorship
-• OWP allows working for any employer in Canada
-• Processing takes 2-4 months typically
-• Valid until a decision is made on the PR application
-
-**Outland applications (spouse outside Canada):**
-• Cannot work in Canada until they receive their PR visa
-• Must wait outside Canada during processing
-• Can visit Canada as a visitor (if eligible) but cannot work
-
-**After PR approval:**
-• Full work authorization as a permanent resident
-• No restrictions on employment""",
-
-    "cost": """**Spousal sponsorship fees (2024):**
-
-• Sponsorship fee: $75
-• Principal applicant processing fee: $490
-• Right of Permanent Residence Fee (RPRF): $515
-• Biometrics: $85
-
-**Total government fees:** ~$1,165 CAD
-
-**Additional costs to budget for:**
-• Medical exam: $200-400
-• Police certificates: $50-100 per country
-• Translation/notarization: Varies
-• Photos: $15-30
-• Courier/mailing: $50-100
-
-**Optional:**
-• Immigration lawyer/consultant: $2,000-5,000+"""
-}
+class ChatFormInput(BaseModel):
+    message: str
+    current_data: Optional[dict] = None
 
 
-@app.post("/chat")
-async def chat_assistant(chat: ChatInput):
-    """Simple FAQ-based chat assistant for sponsorship questions."""
-    message = chat.message.lower()
+import re
+from datetime import datetime as dt
+
+
+def parse_date(date_str: str) -> Optional[str]:
+    """Parse various date formats to YYYY-MM-DD."""
+    if not date_str:
+        return None
     
-    # Match to FAQ topics
-    if any(word in message for word in ['document', 'need', 'require', 'what do i need', 'checklist']):
-        response = SPONSORSHIP_FAQ["documents"]
-    elif any(word in message for word in ['how long', 'timeline', 'processing', 'time', 'wait']):
-        response = SPONSORSHIP_FAQ["timeline"]
-    elif any(word in message for word in ['eligib', 'qualify', 'requirement', 'can i sponsor', 'who can']):
-        response = SPONSORSHIP_FAQ["eligibility"]
-    elif any(word in message for word in ['work', 'job', 'employ', 'owp', 'work permit']):
-        response = SPONSORSHIP_FAQ["work"]
-    elif any(word in message for word in ['cost', 'fee', 'price', 'how much', 'pay']):
-        response = SPONSORSHIP_FAQ["cost"]
-    elif any(word in message for word in ['inland', 'outland', 'inside canada', 'outside canada']):
-        response = """**Inland vs Outland Sponsorship:**
+    date_str = date_str.strip()
+    
+    # Common date patterns
+    patterns = [
+        # YYYY-MM-DD (already correct)
+        (r'(\d{4})-(\d{1,2})-(\d{1,2})', lambda m: f"{m.group(1)}-{m.group(2).zfill(2)}-{m.group(3).zfill(2)}"),
+        # Month DD, YYYY or Month DD YYYY
+        (r'(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),?\s+(\d{4})', 
+         lambda m: f"{m.group(3)}-{['January','February','March','April','May','June','July','August','September','October','November','December'].index(m.group(1))+1:02d}-{int(m.group(2)):02d}"),
+        # Jan DD, YYYY or Jan DD YYYY
+        (r'(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2}),?\s+(\d{4})',
+         lambda m: f"{m.group(3)}-{['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].index(m.group(1))+1:02d}-{int(m.group(2)):02d}"),
+        # DD/MM/YYYY or DD-MM-YYYY
+        (r'(\d{1,2})[/-](\d{1,2})[/-](\d{4})', lambda m: f"{m.group(3)}-{m.group(2).zfill(2)}-{m.group(1).zfill(2)}"),
+        # MM/DD/YYYY (US format) - assume if month > 12
+        (r'(\d{1,2})/(\d{1,2})/(\d{4})', lambda m: f"{m.group(3)}-{m.group(1).zfill(2)}-{m.group(2).zfill(2)}" if int(m.group(1)) <= 12 else f"{m.group(3)}-{m.group(2).zfill(2)}-{m.group(1).zfill(2)}"),
+    ]
+    
+    for pattern, formatter in patterns:
+        match = re.search(pattern, date_str, re.IGNORECASE)
+        if match:
+            try:
+                return formatter(match)
+            except:
+                continue
+    return None
 
-**Inland (spouse is IN Canada):**
-• Spouse must have valid status in Canada
-• Can apply for Open Work Permit
-• Cannot leave Canada during processing (or application may be abandoned)
-• Processing: 12-18 months
 
-**Outland (spouse is OUTSIDE Canada):**
-• Spouse waits in their home country
-• Cannot work in Canada during processing
-• Can visit Canada as a visitor
-• Processing: 12-15 months
-• Generally faster processing
+def parse_phone(phone_str: str) -> Optional[str]:
+    """Format phone to +1 (XXX) XXX-XXXX."""
+    if not phone_str:
+        return None
+    
+    # Extract digits
+    digits = re.sub(r'\D', '', phone_str)
+    
+    # Handle different lengths
+    if len(digits) == 10:
+        return f"+1 ({digits[:3]}) {digits[3:6]}-{digits[6:]}"
+    elif len(digits) == 11 and digits[0] == '1':
+        return f"+1 ({digits[1:4]}) {digits[4:7]}-{digits[7:]}"
+    return phone_str  # Return as-is if can't parse
 
-Choose based on your situation and whether your spouse needs to work in Canada during processing."""
-    elif any(word in message for word in ['common-law', 'common law', 'not married']):
-        response = """**Common-law sponsorship requirements:**
 
-To qualify as common-law partners, you must:
-• Have lived together continuously for at least 12 months
-• Be in a conjugal (marriage-like) relationship
-• Provide proof of cohabitation (lease, bills, mail to same address)
+def extract_form_fields(message: str) -> dict:
+    """Extract form fields from natural language input."""
+    fields = {}
+    msg_lower = message.lower()
+    
+    # Determine if talking about sponsor or applicant
+    is_sponsor = any(word in msg_lower for word in ['sponsor', 'i am', "i'm", 'my name', 'canadian'])
+    is_applicant = any(word in msg_lower for word in ['applicant', 'spouse', 'partner', 'wife', 'husband', 'fiancé', 'fiancee'])
+    
+    # If neither specified, try to infer from context
+    if not is_sponsor and not is_applicant:
+        # Default to sponsor if talking about self
+        if any(word in msg_lower for word in ['i ', 'my ', "i'm"]):
+            is_sponsor = True
+        else:
+            is_applicant = True
+    
+    prefix = 'sponsor_' if is_sponsor else 'applicant_'
+    
+    # Extract name - look for patterns like "Name is X" or "X, born" or just a capitalized name
+    name_patterns = [
+        r'(?:name is|named|called)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)',
+        r'(?:sponsor|applicant|spouse|partner)(?:\s+is)?[:\s]+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)',
+        r'^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)',  # Name at start
+        r'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)(?:,?\s+(?:born|dob|date of birth))',
+    ]
+    
+    for pattern in name_patterns:
+        match = re.search(pattern, message)
+        if match:
+            full_name = match.group(1).strip()
+            name_parts = full_name.split()
+            if len(name_parts) >= 2:
+                # Last word is family name, rest are given names
+                fields[f'{prefix}family_name'] = name_parts[-1].upper()
+                fields[f'{prefix}given_name'] = ' '.join(name_parts[:-1])
+            elif len(name_parts) == 1:
+                fields[f'{prefix}given_name'] = name_parts[0]
+            break
+    
+    # Extract date of birth
+    dob_patterns = [
+        r'(?:born|dob|date of birth|birthday)[:\s]+([A-Za-z]+\s+\d{1,2},?\s+\d{4})',
+        r'(?:born|dob|date of birth|birthday)[:\s]+(\d{1,2}[/-]\d{1,2}[/-]\d{4})',
+        r'(?:born|dob|date of birth|birthday)[:\s]+(\d{4}-\d{1,2}-\d{1,2})',
+        r'(\d{4}-\d{1,2}-\d{1,2})',  # ISO date anywhere
+    ]
+    
+    for pattern in dob_patterns:
+        match = re.search(pattern, message, re.IGNORECASE)
+        if match:
+            parsed = parse_date(match.group(1))
+            if parsed:
+                fields[f'{prefix}dob'] = parsed
+                break
+    
+    # Extract country of birth
+    country_patterns = [
+        r'(?:born in|from|country of birth|birth country)[:\s]+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)',
+        r'(?:in|from)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s*$',
+    ]
+    
+    for pattern in country_patterns:
+        match = re.search(pattern, message)
+        if match:
+            country = match.group(1).strip()
+            # Skip if it's a name we already captured
+            if country.upper() not in [fields.get(f'{prefix}family_name', ''), fields.get(f'{prefix}given_name', '').upper()]:
+                fields[f'{prefix}country_birth'] = country
+                break
+    
+    # Extract citizenship
+    citizenship_match = re.search(r'(?:citizen(?:ship)?|nationality)[:\s]+([A-Z][a-z]+)', message, re.IGNORECASE)
+    if citizenship_match:
+        fields[f'{prefix}citizenship'] = citizenship_match.group(1)
+    
+    # Extract email
+    email_match = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', message)
+    if email_match:
+        fields[f'{prefix}email'] = email_match.group(0)
+    
+    # Extract phone
+    phone_match = re.search(r'(?:phone|tel|cell|mobile)[:\s]*([\d\s\-\(\)\+]+)', message, re.IGNORECASE)
+    if phone_match:
+        parsed_phone = parse_phone(phone_match.group(1))
+        if parsed_phone:
+            fields[f'{prefix}phone'] = parsed_phone
+    
+    # Extract relationship info (not prefixed)
+    if 'married' in msg_lower or 'wedding' in msg_lower or 'marriage' in msg_lower:
+        date_match = re.search(r'(?:married|wedding|marriage)(?:\s+(?:on|date))?[:\s]+([A-Za-z]+\s+\d{1,2},?\s+\d{4}|\d{1,2}[/-]\d{1,2}[/-]\d{4})', message, re.IGNORECASE)
+        if date_match:
+            parsed = parse_date(date_match.group(1))
+            if parsed:
+                fields['date_married'] = parsed
+        
+        place_match = re.search(r'(?:married|wedding)\s+(?:in|at)\s+([A-Z][a-z]+(?:[,\s]+[A-Z][a-z]+)?)', message)
+        if place_match:
+            fields['place_married'] = place_match.group(1)
+    
+    # Relationship type
+    if 'common-law' in msg_lower or 'common law' in msg_lower:
+        fields['relationship_type'] = 'common_law'
+    elif 'conjugal' in msg_lower:
+        fields['relationship_type'] = 'conjugal'
+    elif 'spouse' in msg_lower or 'married' in msg_lower or 'wife' in msg_lower or 'husband' in msg_lower:
+        fields['relationship_type'] = 'spouse'
+    
+    return fields
 
-**Evidence needed:**
-• Joint lease or mortgage
-• Joint bank accounts or bills
-• Statutory declarations from both partners
-• Letters from friends/family confirming cohabitation
-• Photos together in shared home
 
-If you cannot live together due to immigration barriers, you may qualify as "conjugal partners" instead."""
-    elif any(word in message for word in ['reject', 'denied', 'refuse', 'appeal']):
-        response = """**If your sponsorship is refused:**
-
-1. **Review the refusal letter** - understand the specific reasons
-2. **Options available:**
-   • Request reconsideration (within 30 days)
-   • Apply to Federal Court for judicial review (within 15-60 days)
-   • Submit a new application addressing the concerns
-
-**Common refusal reasons:**
-• Insufficient proof of genuine relationship
-• Sponsor doesn't meet income requirements
-• Applicant is inadmissible (medical, criminal, misrepresentation)
-• Missing documents
-
-**Tip:** Consider consulting an immigration lawyer if refused."""
+@app.post("/chat-form-fill")
+async def chat_form_fill(chat: ChatFormInput):
+    """Chat assistant that extracts form fields from natural language."""
+    message = chat.message
+    current_data = chat.current_data or {}
+    
+    # Extract fields from the message
+    extracted = extract_form_fields(message)
+    
+    # Build response
+    if extracted:
+        response_parts = ["✓ I've extracted and formatted the following for IRCC:\n"]
+        
+        field_labels = {
+            'sponsor_family_name': 'Sponsor Family Name',
+            'sponsor_given_name': 'Sponsor Given Name(s)',
+            'sponsor_dob': 'Sponsor Date of Birth',
+            'sponsor_country_birth': 'Sponsor Country of Birth',
+            'sponsor_citizenship': 'Sponsor Citizenship',
+            'sponsor_email': 'Sponsor Email',
+            'sponsor_phone': 'Sponsor Phone',
+            'applicant_family_name': 'Applicant Family Name',
+            'applicant_given_name': 'Applicant Given Name(s)',
+            'applicant_dob': 'Applicant Date of Birth',
+            'applicant_country_birth': 'Applicant Country of Birth',
+            'applicant_citizenship': 'Applicant Citizenship',
+            'applicant_email': 'Applicant Email',
+            'applicant_phone': 'Applicant Phone',
+            'relationship_type': 'Relationship Type',
+            'date_married': 'Date of Marriage/Union',
+            'place_married': 'Place of Marriage',
+        }
+        
+        for field, value in extracted.items():
+            label = field_labels.get(field, field.replace('_', ' ').title())
+            response_parts.append(f"• {label}: {value}")
+        
+        response_parts.append("\nThe form has been updated. Continue with more information or switch to Form Wizard to review.")
+        response = '\n'.join(response_parts)
     else:
-        response = """I can help you with questions about Canadian spousal sponsorship. Here are some topics I can assist with:
+        response = """I couldn't extract specific form fields from that. Try formats like:
 
-• **Documents required** - What you need to submit
-• **Processing times** - How long it takes
-• **Eligibility** - Who can sponsor and be sponsored
-• **Work permits** - Can your spouse work while waiting?
-• **Costs and fees** - Government and other expenses
-• **Inland vs Outland** - Which option to choose
-• **Common-law** - Requirements for unmarried couples
+• "Sponsor is John Smith, born March 15, 1985 in Canada"
+• "Applicant: Maria Garcia, DOB 1990-01-05, from Mexico"
+• "We got married on June 15, 2023 in Toronto"
+• "Email: john@email.com, phone 416-555-1234"
 
-What would you like to know more about?"""
+What information would you like to add?"""
     
-    return {"response": response}
+    return {
+        "response": response,
+        "extracted_fields": extracted
+    }
