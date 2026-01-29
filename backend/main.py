@@ -741,3 +741,354 @@ What information would you like to add?"""
         "response": response,
         "extracted_fields": extracted
     }
+
+
+# ============== Eligibility Assessment ==============
+
+class EligibilityInput(BaseModel):
+    application_type: str  # visitor_visa, work_permit, super_visa
+    answers: dict
+
+
+# LICO (Low Income Cut-Off) 2024 + 30% for Super Visa
+# Based on family size in urban areas (500,000+ population)
+LICO_2024 = {
+    1: 29380,
+    2: 36576,
+    3: 44966,
+    4: 54594,
+    5: 61920,
+    6: 69834,
+    7: 77749,
+}
+
+def get_lico_requirement(family_size: int) -> int:
+    """Get LICO+30% requirement for Super Visa based on family size."""
+    if family_size > 7:
+        # Add ~$7,915 for each additional person
+        base = LICO_2024[7]
+        extra = (family_size - 7) * 7915
+        return int((base + extra) * 1.3)
+    return int(LICO_2024.get(family_size, LICO_2024[1]) * 1.3)
+
+
+ELIGIBILITY_QUESTIONS = {
+    "visitor_visa": [
+        {
+            "id": "purpose",
+            "question": "What is the main purpose of your visit to Canada?",
+            "type": "select",
+            "options": ["Tourism/Vacation", "Visiting family/friends", "Business meetings", "Medical treatment", "Other"],
+            "required": True
+        },
+        {
+            "id": "valid_passport",
+            "question": "Do you have a valid passport that won't expire during your planned stay?",
+            "type": "boolean",
+            "required": True,
+            "fail_reason": "You need a valid passport that covers your entire stay in Canada."
+        },
+        {
+            "id": "ties_home",
+            "question": "Do you have strong ties to your home country? (job, property, family, business)",
+            "type": "boolean",
+            "required": True,
+            "fail_reason": "Strong ties to your home country are important to show you'll return after your visit."
+        },
+        {
+            "id": "sufficient_funds",
+            "question": "Do you have sufficient funds to cover your stay? (accommodation, food, activities, return travel)",
+            "type": "boolean",
+            "required": True,
+            "fail_reason": "You must demonstrate you have enough money to support yourself during your visit."
+        },
+        {
+            "id": "previous_refusal",
+            "question": "Have you ever been refused a visa to Canada, the US, UK, or Australia?",
+            "type": "boolean",
+            "required": True,
+            "warning": "Previous refusals don't automatically disqualify you, but you should address the reasons in your new application."
+        },
+        {
+            "id": "criminal_record",
+            "question": "Do you have any criminal convictions?",
+            "type": "boolean",
+            "required": True,
+            "fail_reason": "Criminal inadmissibility may prevent entry to Canada. You may need a Temporary Resident Permit or Criminal Rehabilitation."
+        },
+        {
+            "id": "health_issues",
+            "question": "Do you have any serious health conditions that might require medical treatment in Canada?",
+            "type": "boolean",
+            "required": True,
+            "warning": "Health conditions don't disqualify you, but you may need additional documentation or medical exams."
+        },
+        {
+            "id": "overstay",
+            "question": "Have you ever overstayed a visa in any country?",
+            "type": "boolean",
+            "required": True,
+            "fail_reason": "Previous overstays are a significant concern and may result in refusal."
+        }
+    ],
+    "work_permit": [
+        {
+            "id": "job_offer",
+            "question": "Do you have a valid job offer from a Canadian employer?",
+            "type": "boolean",
+            "required": True,
+            "fail_reason": "Most work permits require a job offer from a Canadian employer with an LMIA or LMIA-exempt position."
+        },
+        {
+            "id": "lmia_status",
+            "question": "Does your employer have an approved LMIA (Labour Market Impact Assessment) or is the position LMIA-exempt?",
+            "type": "select",
+            "options": ["Yes, LMIA approved", "Yes, LMIA-exempt (e.g., CUSMA, intra-company transfer)", "No/Don't know", "Applying under IEC (Working Holiday)"],
+            "required": True
+        },
+        {
+            "id": "valid_passport",
+            "question": "Do you have a valid passport?",
+            "type": "boolean",
+            "required": True,
+            "fail_reason": "You need a valid passport to apply for a work permit."
+        },
+        {
+            "id": "qualifications",
+            "question": "Do you have the qualifications, education, or experience required for the job?",
+            "type": "boolean",
+            "required": True,
+            "fail_reason": "You must demonstrate you're qualified for the position offered."
+        },
+        {
+            "id": "criminal_record",
+            "question": "Do you have any criminal convictions?",
+            "type": "boolean",
+            "required": True,
+            "fail_reason": "Criminal inadmissibility may prevent you from obtaining a work permit."
+        },
+        {
+            "id": "medical_exam",
+            "question": "Are you willing to undergo a medical exam if required? (Required for certain jobs or if staying 6+ months)",
+            "type": "boolean",
+            "required": True,
+            "fail_reason": "Medical exams are mandatory for certain work permits."
+        },
+        {
+            "id": "leave_canada",
+            "question": "Will you leave Canada when your work permit expires?",
+            "type": "boolean",
+            "required": True,
+            "fail_reason": "You must demonstrate intent to leave Canada at the end of your authorized stay."
+        }
+    ],
+    "super_visa": [
+        {
+            "id": "relationship",
+            "question": "What is your relationship to the person inviting you to Canada?",
+            "type": "select",
+            "options": ["Parent", "Grandparent", "Not a parent or grandparent"],
+            "required": True,
+            "fail_value": "Not a parent or grandparent",
+            "fail_reason": "Super Visa is only available to parents and grandparents of Canadian citizens or permanent residents."
+        },
+        {
+            "id": "host_status",
+            "question": "Is your child/grandchild a Canadian citizen or permanent resident?",
+            "type": "boolean",
+            "required": True,
+            "fail_reason": "Your child or grandchild must be a Canadian citizen or permanent resident to invite you on a Super Visa."
+        },
+        {
+            "id": "family_size",
+            "question": "How many people are in your child/grandchild's household? (Include themselves, spouse, and dependents)",
+            "type": "number",
+            "min": 1,
+            "max": 10,
+            "required": True
+        },
+        {
+            "id": "host_income",
+            "question": "What is your child/grandchild's annual gross income (before taxes)? Enter the amount in CAD.",
+            "type": "number",
+            "required": True
+        },
+        {
+            "id": "medical_insurance",
+            "question": "Will you purchase Canadian medical insurance valid for at least 1 year with minimum $100,000 coverage?",
+            "type": "boolean",
+            "required": True,
+            "fail_reason": "Super Visa requires proof of private medical insurance from a Canadian insurance company, valid for at least 1 year with minimum $100,000 coverage."
+        },
+        {
+            "id": "valid_passport",
+            "question": "Do you have a valid passport?",
+            "type": "boolean",
+            "required": True,
+            "fail_reason": "You need a valid passport to apply for a Super Visa."
+        },
+        {
+            "id": "medical_exam",
+            "question": "Are you willing to complete an immigration medical exam?",
+            "type": "boolean",
+            "required": True,
+            "fail_reason": "A medical exam from an IRCC-approved panel physician is mandatory for Super Visa."
+        },
+        {
+            "id": "criminal_record",
+            "question": "Do you have any criminal convictions?",
+            "type": "boolean",
+            "required": True,
+            "fail_reason": "Criminal inadmissibility may prevent you from obtaining a Super Visa."
+        },
+        {
+            "id": "previous_refusal",
+            "question": "Have you ever been refused a Canadian visa?",
+            "type": "boolean",
+            "required": True,
+            "warning": "Previous refusals don't automatically disqualify you, but you should address the reasons in your application."
+        }
+    ]
+}
+
+
+@app.get("/eligibility/questions/{application_type}")
+async def get_eligibility_questions(application_type: str):
+    """Get the eligibility questions for a specific application type."""
+    if application_type not in ELIGIBILITY_QUESTIONS:
+        raise HTTPException(status_code=400, detail=f"Unknown application type: {application_type}")
+    
+    return {
+        "application_type": application_type,
+        "questions": ELIGIBILITY_QUESTIONS[application_type]
+    }
+
+
+@app.post("/eligibility/assess")
+async def assess_eligibility(data: EligibilityInput):
+    """Assess eligibility based on answers."""
+    app_type = data.application_type
+    answers = data.answers
+    
+    if app_type not in ELIGIBILITY_QUESTIONS:
+        raise HTTPException(status_code=400, detail=f"Unknown application type: {app_type}")
+    
+    questions = ELIGIBILITY_QUESTIONS[app_type]
+    
+    issues = []
+    warnings = []
+    score = 100
+    
+    for q in questions:
+        qid = q["id"]
+        answer = answers.get(qid)
+        
+        if answer is None:
+            continue
+        
+        # Check for fail conditions
+        if q["type"] == "boolean":
+            # For most boolean questions, True is good (except criminal_record, overstay, health_issues)
+            negative_questions = ["criminal_record", "overstay", "previous_refusal", "health_issues"]
+            
+            if qid in negative_questions:
+                if answer == True:
+                    if q.get("fail_reason"):
+                        issues.append(q["fail_reason"])
+                        score -= 25
+                    elif q.get("warning"):
+                        warnings.append(q["warning"])
+                        score -= 10
+            else:
+                if answer == False and q.get("fail_reason"):
+                    issues.append(q["fail_reason"])
+                    score -= 25
+        
+        elif q["type"] == "select":
+            if q.get("fail_value") and answer == q["fail_value"]:
+                issues.append(q["fail_reason"])
+                score -= 30
+            
+            # Special handling for LMIA question
+            if qid == "lmia_status" and answer == "No/Don't know":
+                issues.append("You need either an LMIA-approved job offer or an LMIA-exempt position to get a work permit. Ask your employer about LMIA status.")
+                score -= 25
+    
+    # Special Super Visa income check
+    if app_type == "super_visa":
+        family_size = answers.get("family_size", 1)
+        host_income = answers.get("host_income", 0)
+        
+        required_income = get_lico_requirement(int(family_size))
+        
+        if host_income < required_income:
+            shortfall = required_income - host_income
+            issues.append(
+                f"Income requirement not met. For a family of {family_size}, the minimum income required is ${required_income:,} CAD (LICO+30%). "
+                f"Current income: ${host_income:,} CAD. Shortfall: ${shortfall:,} CAD. "
+                f"Options: Add a co-signer, use spouse's income, or wait until income increases."
+            )
+            score -= 30
+        else:
+            surplus = host_income - required_income
+            warnings.append(f"✓ Income requirement met! Required: ${required_income:,} CAD. Your host's income: ${host_income:,} CAD (${surplus:,} above minimum).")
+    
+    # Determine overall eligibility
+    score = max(0, min(100, score))
+    
+    if score >= 80:
+        eligibility = "likely_eligible"
+        summary = "Based on your answers, you appear to meet the basic eligibility requirements. You should proceed with your application."
+    elif score >= 50:
+        eligibility = "possibly_eligible"
+        summary = "You may be eligible, but there are some concerns that could affect your application. Review the issues below and consider addressing them before applying."
+    else:
+        eligibility = "unlikely_eligible"
+        summary = "Based on your answers, you may face significant challenges with this application. Review the issues below carefully. You may want to consult an immigration professional."
+    
+    # Application-specific tips
+    tips = []
+    if app_type == "visitor_visa":
+        tips = [
+            "Include a detailed travel itinerary",
+            "Provide proof of funds (bank statements for 3-6 months)",
+            "Show strong ties to your home country (employment letter, property documents)",
+            "If visiting family, include an invitation letter"
+        ]
+    elif app_type == "work_permit":
+        tips = [
+            "Ensure your employer has completed the LMIA process (if required)",
+            "Gather proof of your qualifications and work experience",
+            "Have your job offer letter ready with salary and job details",
+            "Check if you need a medical exam based on your occupation"
+        ]
+    elif app_type == "super_visa":
+        tips = [
+            "Get medical insurance quotes before applying",
+            "Your child/grandchild should prepare a letter of invitation",
+            "Gather proof of your host's income (NOA, T4, employment letter)",
+            "Book your medical exam with an IRCC-approved physician"
+        ]
+    
+    return {
+        "eligibility": eligibility,
+        "score": score,
+        "summary": summary,
+        "issues": issues,
+        "warnings": warnings,
+        "tips": tips,
+        "income_requirement": get_lico_requirement(int(answers.get("family_size", 1))) if app_type == "super_visa" else None
+    }
+
+
+@app.get("/eligibility/lico")
+async def get_lico_table():
+    """Get the LICO+30% income requirements table."""
+    return {
+        "year": 2024,
+        "description": "Low Income Cut-Off (LICO) + 30% for Super Visa",
+        "requirements": {
+            size: get_lico_requirement(size) for size in range(1, 8)
+        },
+        "note": "For families larger than 7, add approximately $10,290 for each additional person."
+    }

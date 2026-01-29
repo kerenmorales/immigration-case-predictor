@@ -60,6 +60,7 @@ function App() {
           <nav className="flex gap-1">
             {[
               { id: 'home', label: 'Overview' },
+              { id: 'eligibility', label: 'Eligibility Check' },
               { id: 'predictor', label: 'Case Predictor' },
               { id: 'sponsorship', label: 'Sponsorship Forms' },
               { id: 'history', label: 'My Cases' }
@@ -82,6 +83,7 @@ function App() {
 
       <main className="max-w-6xl mx-auto px-6 py-8">
         {activeTab === 'home' && <HomePage setActiveTab={setActiveTab} />}
+        {activeTab === 'eligibility' && <EligibilityCheck />}
         {activeTab === 'predictor' && <CasePredictor user={user} />}
         {activeTab === 'sponsorship' && <SponsorshipAssistant formData={sponsorshipData} setFormData={setSponsorshipData} user={user} />}
         {activeTab === 'history' && <UserHistory user={user} />}
@@ -238,6 +240,372 @@ function HomePage({ setActiveTab }) {
           <p>• Predictions are based on historical patterns and may not account for recent legal developments.</p>
           <p>• Each case has unique circumstances that may not be fully captured by text analysis.</p>
           <p>• Always conduct independent legal research and analysis for your clients.</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function EligibilityCheck() {
+  const [appType, setAppType] = useState(null)
+  const [questions, setQuestions] = useState([])
+  const [currentQuestion, setCurrentQuestion] = useState(0)
+  const [answers, setAnswers] = useState({})
+  const [result, setResult] = useState(null)
+  const [loading, setLoading] = useState(false)
+
+  const appTypes = [
+    { id: 'visitor_visa', name: 'Visitor Visa', icon: '✈️', desc: 'Tourism, visiting family, or business' },
+    { id: 'work_permit', name: 'Work Permit', icon: '💼', desc: 'Employment in Canada' },
+    { id: 'super_visa', name: 'Super Visa', icon: '👨‍👩‍👧', desc: 'Parents & grandparents (up to 5 years)' }
+  ]
+
+  const startAssessment = async (type) => {
+    setAppType(type)
+    setLoading(true)
+    try {
+      const response = await fetch(`${API_URL}/eligibility/questions/${type}`)
+      const data = await response.json()
+      setQuestions(data.questions)
+      setCurrentQuestion(0)
+      setAnswers({})
+      setResult(null)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleAnswer = (questionId, value) => {
+    setAnswers(prev => ({ ...prev, [questionId]: value }))
+  }
+
+  const nextQuestion = () => {
+    if (currentQuestion < questions.length - 1) {
+      setCurrentQuestion(prev => prev + 1)
+    }
+  }
+
+  const prevQuestion = () => {
+    if (currentQuestion > 0) {
+      setCurrentQuestion(prev => prev - 1)
+    }
+  }
+
+  const submitAssessment = async () => {
+    setLoading(true)
+    try {
+      const response = await fetch(`${API_URL}/eligibility/assess`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ application_type: appType, answers })
+      })
+      const data = await response.json()
+      setResult(data)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const resetAssessment = () => {
+    setAppType(null)
+    setQuestions([])
+    setCurrentQuestion(0)
+    setAnswers({})
+    setResult(null)
+  }
+
+  // Application type selection
+  if (!appType) {
+    return (
+      <div>
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-slate-800 mb-3">Eligibility Pre-Assessment</h1>
+          <p className="text-slate-600 max-w-2xl mx-auto">
+            Answer a few questions to check if you meet the basic requirements for your Canadian immigration application.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {appTypes.map(type => (
+            <button
+              key={type.id}
+              onClick={() => startAssessment(type.id)}
+              className="bg-white rounded-xl border border-slate-200 p-8 text-left hover:border-red-300 hover:shadow-lg transition-all group"
+            >
+              <div className="text-4xl mb-4">{type.icon}</div>
+              <h3 className="text-xl font-semibold text-slate-800 mb-2 group-hover:text-red-600">{type.name}</h3>
+              <p className="text-slate-500 text-sm">{type.desc}</p>
+            </button>
+          ))}
+        </div>
+        <div className="mt-8 bg-blue-50 border border-blue-200 rounded-xl p-6">
+          <h3 className="font-semibold text-blue-800 mb-2">How it works</h3>
+          <p className="text-sm text-blue-700">
+            This tool asks you questions based on IRCC eligibility criteria. Based on your answers, 
+            we'll tell you if you likely qualify, and if not, explain exactly why and what you can do about it.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  // Show results
+  if (result) {
+    return (
+      <div>
+        <button onClick={resetAssessment} className="mb-6 text-slate-600 hover:text-slate-800 flex items-center gap-2">
+          ← Start New Assessment
+        </button>
+        
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div className={`px-8 py-6 ${
+            result.eligibility === 'likely_eligible' ? 'bg-green-50 border-b border-green-200' :
+            result.eligibility === 'possibly_eligible' ? 'bg-amber-50 border-b border-amber-200' :
+            'bg-red-50 border-b border-red-200'
+          }`}>
+            <div className="flex items-center gap-4">
+              <div className={`text-5xl ${
+                result.eligibility === 'likely_eligible' ? '' :
+                result.eligibility === 'possibly_eligible' ? '' : ''
+              }`}>
+                {result.eligibility === 'likely_eligible' ? '✅' :
+                 result.eligibility === 'possibly_eligible' ? '⚠️' : '❌'}
+              </div>
+              <div>
+                <h2 className={`text-2xl font-bold ${
+                  result.eligibility === 'likely_eligible' ? 'text-green-800' :
+                  result.eligibility === 'possibly_eligible' ? 'text-amber-800' :
+                  'text-red-800'
+                }`}>
+                  {result.eligibility === 'likely_eligible' ? 'You Likely Qualify!' :
+                   result.eligibility === 'possibly_eligible' ? 'You May Qualify' :
+                   'Eligibility Concerns'}
+                </h2>
+                <p className={`text-sm ${
+                  result.eligibility === 'likely_eligible' ? 'text-green-700' :
+                  result.eligibility === 'possibly_eligible' ? 'text-amber-700' :
+                  'text-red-700'
+                }`}>
+                  Eligibility Score: {result.score}/100
+                </p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="p-8">
+            <p className="text-slate-700 mb-6">{result.summary}</p>
+            
+            {result.issues.length > 0 && (
+              <div className="mb-6">
+                <h3 className="font-semibold text-red-800 mb-3">❌ Issues Found</h3>
+                <div className="space-y-3">
+                  {result.issues.map((issue, i) => (
+                    <div key={i} className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-800">
+                      {issue}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {result.warnings.length > 0 && (
+              <div className="mb-6">
+                <h3 className="font-semibold text-amber-800 mb-3">⚠️ Notes</h3>
+                <div className="space-y-3">
+                  {result.warnings.map((warning, i) => (
+                    <div key={i} className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800">
+                      {warning}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {result.income_requirement && (
+              <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h3 className="font-semibold text-blue-800 mb-2">💰 Income Requirement (LICO+30%)</h3>
+                <p className="text-blue-700">
+                  Minimum required: <span className="font-bold">${result.income_requirement.toLocaleString()} CAD</span> per year
+                </p>
+              </div>
+            )}
+            
+            {result.tips.length > 0 && (
+              <div>
+                <h3 className="font-semibold text-slate-800 mb-3">💡 Tips for Your Application</h3>
+                <ul className="space-y-2">
+                  {result.tips.map((tip, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm text-slate-600">
+                      <span className="text-green-500 mt-0.5">✓</span>
+                      {tip}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Question flow
+  const q = questions[currentQuestion]
+  if (!q) return <div className="text-center py-12">Loading questions...</div>
+
+  return (
+    <div>
+      <button onClick={resetAssessment} className="mb-6 text-slate-600 hover:text-slate-800 flex items-center gap-2">
+        ← Choose Different Application
+      </button>
+      
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+        {/* Progress */}
+        <div className="lg:col-span-1">
+          <div className="bg-white rounded-xl border border-slate-200 p-6">
+            <h3 className="font-semibold text-slate-800 mb-4">
+              {appTypes.find(t => t.id === appType)?.name}
+            </h3>
+            <div className="space-y-2">
+              {questions.map((question, i) => (
+                <div
+                  key={question.id}
+                  className={`flex items-center gap-2 text-sm ${
+                    i === currentQuestion ? 'text-red-600 font-medium' :
+                    answers[question.id] !== undefined ? 'text-green-600' : 'text-slate-400'
+                  }`}
+                >
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${
+                    i === currentQuestion ? 'bg-red-100 text-red-600' :
+                    answers[question.id] !== undefined ? 'bg-green-100 text-green-600' : 'bg-slate-100'
+                  }`}>
+                    {answers[question.id] !== undefined ? '✓' : i + 1}
+                  </div>
+                  <span className="truncate">Q{i + 1}</span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 pt-4 border-t border-slate-200">
+              <p className="text-xs text-slate-500">
+                Question {currentQuestion + 1} of {questions.length}
+              </p>
+              <div className="mt-2 w-full bg-slate-200 rounded-full h-2">
+                <div
+                  className="bg-red-600 h-2 rounded-full transition-all"
+                  style={{ width: `${((currentQuestion + 1) / questions.length) * 100}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Question */}
+        <div className="lg:col-span-3">
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="bg-slate-50 px-6 py-4 border-b border-slate-200">
+              <p className="text-sm text-slate-500">Question {currentQuestion + 1}</p>
+            </div>
+            <div className="p-8">
+              <h2 className="text-xl font-semibold text-slate-800 mb-6">{q.question}</h2>
+              
+              {q.type === 'boolean' && (
+                <div className="flex gap-4">
+                  <button
+                    onClick={() => handleAnswer(q.id, true)}
+                    className={`flex-1 py-4 px-6 rounded-lg border-2 font-medium transition-all ${
+                      answers[q.id] === true
+                        ? 'border-green-500 bg-green-50 text-green-700'
+                        : 'border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    Yes
+                  </button>
+                  <button
+                    onClick={() => handleAnswer(q.id, false)}
+                    className={`flex-1 py-4 px-6 rounded-lg border-2 font-medium transition-all ${
+                      answers[q.id] === false
+                        ? 'border-red-500 bg-red-50 text-red-700'
+                        : 'border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    No
+                  </button>
+                </div>
+              )}
+              
+              {q.type === 'select' && (
+                <div className="space-y-3">
+                  {q.options.map(option => (
+                    <button
+                      key={option}
+                      onClick={() => handleAnswer(q.id, option)}
+                      className={`w-full py-3 px-4 rounded-lg border-2 text-left transition-all ${
+                        answers[q.id] === option
+                          ? 'border-red-500 bg-red-50 text-red-700'
+                          : 'border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
+              )}
+              
+              {q.type === 'number' && (
+                <div>
+                  <input
+                    type="number"
+                    value={answers[q.id] || ''}
+                    onChange={(e) => handleAnswer(q.id, parseInt(e.target.value) || 0)}
+                    min={q.min}
+                    max={q.max}
+                    className="w-full border border-slate-300 rounded-lg px-4 py-3 text-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                    placeholder={q.id === 'host_income' ? 'e.g., 65000' : 'Enter number'}
+                  />
+                  {q.id === 'host_income' && (
+                    <p className="mt-2 text-sm text-slate-500">
+                      Enter annual gross income in Canadian dollars (before taxes)
+                    </p>
+                  )}
+                  {q.id === 'family_size' && (
+                    <p className="mt-2 text-sm text-slate-500">
+                      Include your child/grandchild, their spouse, and any dependents living with them
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <div className="flex justify-between mt-8 pt-6 border-t border-slate-200">
+                <button
+                  onClick={prevQuestion}
+                  disabled={currentQuestion === 0}
+                  className="px-6 py-2.5 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Previous
+                </button>
+                {currentQuestion < questions.length - 1 ? (
+                  <button
+                    onClick={nextQuestion}
+                    disabled={answers[q.id] === undefined}
+                    className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium disabled:bg-slate-300 disabled:cursor-not-allowed"
+                  >
+                    Next Question
+                  </button>
+                ) : (
+                  <button
+                    onClick={submitAssessment}
+                    disabled={loading || answers[q.id] === undefined}
+                    className="px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium disabled:bg-slate-300 disabled:cursor-not-allowed"
+                  >
+                    {loading ? 'Analyzing...' : 'Get Results'}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
