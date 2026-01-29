@@ -80,9 +80,41 @@ class PredictionResponse(BaseModel):
     probabilities: dict
     factors: list
     model_type: str
+    risk_level: str
+    risk_description: str
+    data_source: dict
+    historical_context: str
 
 
-def predict_transformer(text: str):
+# Historical stats from training data
+HISTORICAL_STATS = {
+    "total_cases": 7093,
+    "allowed_rate": 30.1,
+    "dismissed_rate": 69.9,
+    "date_range": "1996-2022",
+    "source": "Federal Court of Canada",
+    "dataset": "Refugee Law Lab"
+}
+
+
+def get_risk_assessment(prediction: str, confidence: float) -> tuple:
+    """Convert confidence to risk level and description."""
+    if confidence >= 0.85:
+        level = "High"
+        if prediction == "Allowed":
+            desc = "Strong indicators suggest this case may be allowed. The model found clear patterns matching successful appeals."
+        else:
+            desc = "Strong indicators suggest this case may be dismissed. The model found patterns commonly associated with unsuccessful appeals."
+    elif confidence >= 0.65:
+        level = "Medium"
+        if prediction == "Allowed":
+            desc = "Moderate indicators lean toward allowing this case, but outcome is not certain. Consider strengthening key arguments."
+        else:
+            desc = "Moderate indicators lean toward dismissal, but the case has some favorable elements. Strategic improvements may help."
+    else:
+        level = "Low"
+        desc = "This case could go either way. The model found mixed signals - careful preparation and strong evidence will be crucial."
+    return level, desc
     """Make prediction using transformer model."""
     inputs = tokenizer(
         text,
@@ -134,41 +166,93 @@ async def predict_outcome(case: CaseInput):
     confidence = float(max(probs))
     prob_dict = {OUTCOME_LABELS[i]: float(p) for i, p in enumerate(probs)}
     factors = extract_factors(full_text)
+    prediction_label = OUTCOME_LABELS[prediction]
+    
+    # Get risk assessment
+    risk_level, risk_description = get_risk_assessment(prediction_label, confidence)
+    
+    # Historical context
+    if prediction_label == "Allowed":
+        historical_context = f"Historically, {HISTORICAL_STATS['allowed_rate']}% of cases in our dataset were allowed. Your prediction confidence of {confidence*100:.1f}% suggests this case {'exceeds' if confidence > 0.5 else 'is below'} typical patterns."
+    else:
+        historical_context = f"Historically, {HISTORICAL_STATS['dismissed_rate']}% of cases in our dataset were dismissed. Your prediction confidence of {confidence*100:.1f}% suggests {'strong' if confidence > 0.7 else 'moderate'} alignment with dismissal patterns."
     
     return PredictionResponse(
-        prediction=OUTCOME_LABELS[prediction],
+        prediction=prediction_label,
         confidence=confidence,
         probabilities=prob_dict,
         factors=factors,
-        model_type=model_type
+        model_type=model_type,
+        risk_level=risk_level,
+        risk_description=risk_description,
+        data_source={
+            "name": f"{HISTORICAL_STATS['dataset']} - {HISTORICAL_STATS['source']}",
+            "cases": HISTORICAL_STATS['total_cases'],
+            "period": HISTORICAL_STATS['date_range'],
+            "url": "https://refugeelab.ca/"
+        },
+        historical_context=historical_context
     )
 
 
 def extract_factors(text: str) -> list:
-    """Extract key factors that might influence the prediction."""
+    """Extract key legal factors that might influence the prediction."""
     factor_keywords = {
-        "persecution": "Persecution claim mentioned",
-        "torture": "Torture allegation",
-        "political": "Political persecution",
-        "religious": "Religious persecution",
-        "gender": "Gender-based claim",
-        "credib": "Credibility assessment",
-        "document": "Documentary evidence",
-        "country condition": "Country conditions cited",
-        "ipa": "Internal Protection Alternative (IPA)",
-        "state protection": "State protection analysis",
-        "well-founded fear": "Well-founded fear established",
-        "nexus": "Nexus to Convention ground",
+        # Persecution types
+        "persecution": ("Persecution claim", "neutral"),
+        "torture": ("Torture allegation", "positive"),
+        "political": ("Political persecution", "neutral"),
+        "religious": ("Religious persecution", "neutral"),
+        "gender": ("Gender-based claim", "neutral"),
+        "ethnic": ("Ethnic persecution", "neutral"),
+        "sexual orientation": ("LGBTQ+ persecution", "neutral"),
+        
+        # Key legal concepts
+        "credib": ("Credibility assessment raised", "negative"),
+        "not credible": ("Credibility concerns noted", "negative"),
+        "inconsisten": ("Inconsistencies identified", "negative"),
+        "ipa": ("Internal Protection Alternative (IPA) considered", "negative"),
+        "internal flight": ("Internal flight alternative raised", "negative"),
+        "state protection": ("State protection analysis", "negative"),
+        "adequate state protection": ("Adequate state protection found", "negative"),
+        
+        # Positive indicators
+        "well-founded fear": ("Well-founded fear established", "positive"),
+        "nexus": ("Nexus to Convention ground", "positive"),
+        "documentary evidence": ("Documentary evidence cited", "positive"),
+        "country condition": ("Country conditions evidence", "positive"),
+        "corroborat": ("Corroborating evidence", "positive"),
+        "medical evidence": ("Medical evidence submitted", "positive"),
+        "expert evidence": ("Expert evidence provided", "positive"),
+        
+        # Procedural issues
+        "procedural fairness": ("Procedural fairness issue", "positive"),
+        "breach of": ("Breach alleged", "positive"),
+        "natural justice": ("Natural justice concern", "positive"),
+        "reasonable apprehension": ("Bias concern raised", "positive"),
+        
+        # Decision factors
+        "plausib": ("Plausibility assessment", "neutral"),
+        "balance of probabilities": ("Balance of probabilities standard", "neutral"),
+        "burden of proof": ("Burden of proof discussed", "neutral"),
     }
     
     text_lower = text.lower()
     found_factors = []
     
-    for keyword, description in factor_keywords.items():
+    for keyword, (description, impact) in factor_keywords.items():
         if keyword in text_lower:
-            found_factors.append(description)
+            found_factors.append({"factor": description, "impact": impact})
     
-    return found_factors[:6]
+    # Remove duplicates and limit
+    seen = set()
+    unique_factors = []
+    for f in found_factors:
+        if f["factor"] not in seen:
+            seen.add(f["factor"])
+            unique_factors.append(f)
+    
+    return unique_factors[:8]
 
 
 @app.get("/stats")

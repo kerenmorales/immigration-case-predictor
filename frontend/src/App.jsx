@@ -114,16 +114,73 @@ function CasePredictor() {
       {prediction && (
         <div className="bg-white rounded-lg shadow-md p-6">
           <h3 className="text-lg font-semibold mb-4">Prediction Results</h3>
-          <div className={`inline-block px-4 py-2 rounded-full font-semibold text-lg mb-6 ${prediction.prediction === 'Allowed' ? 'text-green-600 bg-green-50' : 'text-red-600 bg-red-50'}`}>{prediction.prediction}</div>
+          
+          {/* Main Prediction */}
+          <div className="flex items-center gap-4 mb-6">
+            <div className={`px-4 py-2 rounded-full font-semibold text-lg ${prediction.prediction === 'Allowed' ? 'text-green-600 bg-green-50' : 'text-red-600 bg-red-50'}`}>
+              {prediction.prediction}
+            </div>
+            <div className={`px-3 py-1 rounded-full text-sm font-medium ${
+              prediction.risk_level === 'High' ? 'bg-blue-100 text-blue-700' : 
+              prediction.risk_level === 'Medium' ? 'bg-yellow-100 text-yellow-700' : 
+              'bg-gray-100 text-gray-700'
+            }`}>
+              {prediction.risk_level} Confidence
+            </div>
+          </div>
+
+          {/* Risk Assessment */}
+          <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+            <p className="text-sm text-gray-700">{prediction.risk_description}</p>
+          </div>
+
+          {/* Confidence Bar */}
           <div className="mb-6">
-            <p className="text-sm font-medium text-gray-700 mb-2">Confidence</p>
+            <p className="text-sm font-medium text-gray-700 mb-2">Model Confidence</p>
             <div className="w-full bg-gray-200 rounded-full h-4">
-              <div className="bg-indigo-600 h-4 rounded-full" style={{ width: `${prediction.confidence * 100}%` }} />
+              <div className={`h-4 rounded-full ${prediction.prediction === 'Allowed' ? 'bg-green-500' : 'bg-red-500'}`} style={{ width: `${prediction.confidence * 100}%` }} />
             </div>
             <p className="text-sm text-gray-600 mt-1">{(prediction.confidence * 100).toFixed(1)}%</p>
           </div>
+
+          {/* Legal Factors */}
+          {prediction.factors && prediction.factors.length > 0 && (
+            <div className="mb-6">
+              <p className="text-sm font-medium text-gray-700 mb-3">Key Legal Factors Detected</p>
+              <div className="flex flex-wrap gap-2">
+                {prediction.factors.map((f, i) => (
+                  <span key={i} className={`px-3 py-1 rounded-full text-xs font-medium ${
+                    f.impact === 'positive' ? 'bg-green-100 text-green-700' :
+                    f.impact === 'negative' ? 'bg-red-100 text-red-700' :
+                    'bg-gray-100 text-gray-600'
+                  }`}>
+                    {f.factor}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Historical Context */}
+          <div className="mb-6 p-4 border border-indigo-100 bg-indigo-50 rounded-lg">
+            <p className="text-sm font-medium text-indigo-800 mb-1">📊 Historical Context</p>
+            <p className="text-sm text-indigo-700">{prediction.historical_context}</p>
+          </div>
+
+          {/* Data Source */}
+          <div className="mb-6 text-sm text-gray-500">
+            <p className="font-medium">Data Source:</p>
+            <p>{prediction.data_source?.name} • {prediction.data_source?.cases?.toLocaleString()} cases ({prediction.data_source?.period})</p>
+            {prediction.data_source?.url && (
+              <a href={prediction.data_source.url} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">
+                Learn more about the dataset →
+              </a>
+            )}
+          </div>
+
+          {/* Disclaimer */}
           <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-md">
-            <p className="text-sm text-yellow-800"><strong>Disclaimer:</strong> For informational purposes only.</p>
+            <p className="text-sm text-yellow-800"><strong>⚠️ Disclaimer:</strong> This prediction is for informational purposes only and should not be considered legal advice. Actual case outcomes depend on many factors not captured by this model. Always consult with a qualified immigration lawyer.</p>
           </div>
         </div>
       )}
