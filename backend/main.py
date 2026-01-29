@@ -765,228 +765,250 @@ LICO_2024 = {
 def get_lico_requirement(family_size: int) -> int:
     """Get LICO+30% requirement for Super Visa based on family size."""
     if family_size > 7:
-        # Add ~$7,915 for each additional person
         base = LICO_2024[7]
         extra = (family_size - 7) * 7915
         return int((base + extra) * 1.3)
     return int(LICO_2024.get(family_size, LICO_2024[1]) * 1.3)
 
 
+# Helpful links
+LINKS = {
+    "ircc_main": "https://www.canada.ca/en/immigration-refugees-citizenship.html",
+    "ircc_visitor": "https://www.canada.ca/en/immigration-refugees-citizenship/services/visit-canada.html",
+    "ircc_work": "https://www.canada.ca/en/immigration-refugees-citizenship/services/work-canada.html",
+    "ircc_super_visa": "https://www.canada.ca/en/immigration-refugees-citizenship/services/visit-canada/parent-grandparent-super-visa.html",
+    "panel_physicians": "https://secure.cic.gc.ca/pp-md/pp-list.aspx",
+    "cra_my_account": "https://www.canada.ca/en/revenue-agency/services/e-services/digital-services-individuals/account-individuals.html",
+    "cra_phone": "1-800-959-8281",
+    "ircc_phone": "1-888-242-2100",
+    "wes": "https://www.wes.org/ca/",
+    "lico_table": "https://www.canada.ca/en/immigration-refugees-citizenship/services/visit-canada/parent-grandparent-super-visa/eligibility.html",
+}
+
+
 ELIGIBILITY_QUESTIONS = {
     "visitor_visa": [
         {
             "id": "purpose",
-            "question": "What is the main purpose of your visit to Canada?",
+            "question": "Why do you want to visit Canada?",
             "type": "select",
-            "options": ["Tourism/Vacation", "Visiting family/friends", "Business meetings", "Medical treatment", "Other"],
+            "options": ["Tourism/Vacation", "Visiting family or friends", "Business meetings", "Medical treatment", "Other"],
             "required": True,
-            "help": "Select the primary reason for your trip. This helps determine what supporting documents you'll need."
+            "help": "Pick the main reason for your trip. This helps us know what documents you'll need."
         },
         {
             "id": "valid_passport",
-            "question": "Do you have a valid passport that won't expire during your planned stay?",
+            "question": "Do you have a passport that will still be valid when you travel?",
             "type": "boolean",
             "required": True,
-            "fail_reason": "You need a valid passport that covers your entire stay in Canada.",
-            "help": "Your passport should be valid for at least 6 months beyond your planned departure from Canada.",
-            "action_if_no": "Renew your passport before applying. Most countries process renewals in 2-6 weeks."
+            "fail_reason": "You need a valid passport to visit Canada.",
+            "help": "Your passport should be valid for at least 6 months after your planned return date. Check the expiry date on your passport now.",
+            "action_if_no": "Renew your passport first. This usually takes 2-6 weeks depending on your country."
         },
         {
             "id": "ties_home",
-            "question": "Do you have strong ties to your home country?",
+            "question": "Do you have reasons to return to your home country after your visit?",
             "type": "boolean",
             "required": True,
-            "fail_reason": "Strong ties to your home country are important to show you'll return after your visit.",
-            "help": "Examples of strong ties include:\n• Stable employment (job letter, pay stubs)\n• Property ownership (house, land, business)\n• Family responsibilities (spouse, children, elderly parents)\n• Ongoing education enrollment\n• Business ownership or investments\n• Community involvement (memberships, volunteer roles)",
-            "action_if_no": "Gather evidence of ANY ties: bank accounts, family photos, employment history, property documents. Even rental agreements or utility bills help show roots."
+            "fail_reason": "Immigration officers need to see you have reasons to go back home.",
+            "help": "Good examples of 'ties' include:\n✓ A job you need to return to\n✓ A house or property you own\n✓ Family members who depend on you\n✓ A business you run\n✓ School enrollment\n✓ Bank accounts and investments\n\nEven small things count - rental lease, car ownership, club memberships.",
+            "action_if_no": "Don't worry! Gather whatever you have: employment letter, bank statements, family photos, property documents. Even utility bills in your name help."
         },
         {
             "id": "sufficient_funds",
-            "question": "Do you have sufficient funds to cover your stay?",
+            "question": "Do you have enough money saved for your trip?",
             "type": "boolean",
             "required": True,
-            "fail_reason": "You must demonstrate you have enough money to support yourself during your visit.",
-            "help": "You should show funds for:\n• Round-trip airfare\n• Accommodation ($100-200/night or host letter)\n• Daily expenses ($50-100/day)\n• Activities and emergencies\n\nProvide 3-6 months of bank statements showing consistent balance.",
-            "action_if_no": "Options: Get a sponsor in Canada to provide invitation + proof of their funds, save for a few months and reapply, or reduce trip length to match your budget."
+            "fail_reason": "You need to show you can pay for your trip.",
+            "help": "Budget roughly:\n• Flights: varies by location\n• Hotels: $100-200 CAD/night (or free if staying with family)\n• Food & activities: $50-100 CAD/day\n\nShow 3-6 months of bank statements with a steady balance.",
+            "action_if_no": "Options:\n1. Have someone in Canada invite you and show THEIR finances\n2. Save for a few months and apply later\n3. Plan a shorter trip that fits your budget"
         },
         {
             "id": "travel_history",
-            "question": "Have you traveled internationally before? (US, UK, EU, Australia, etc.)",
+            "question": "Have you traveled to other countries before? (US, UK, Europe, Australia, etc.)",
             "type": "boolean",
             "required": True,
-            "help": "Previous travel to developed countries shows you've respected visa rules before. Include any stamps from US, UK, Schengen, Australia, Japan, etc.",
-            "positive_note": "Good travel history strengthens your application significantly."
+            "help": "If you've visited countries like the US, UK, or Europe and returned home on time, that's a big plus! It shows you follow visa rules.",
+            "positive_note": "✓ Great! Previous travel history helps your application."
         },
         {
             "id": "previous_refusal",
-            "question": "Have you ever been refused a visa to Canada, the US, UK, or Australia?",
+            "question": "Have you ever been refused a visa to Canada, US, UK, or Australia?",
             "type": "boolean",
             "required": True,
-            "warning": "Previous refusals don't automatically disqualify you, but you should address the reasons in your new application.",
-            "help": "If yes, you'll need to explain what changed since the refusal. Common reasons: insufficient ties, inadequate funds, unclear purpose.",
-            "action_if_yes": "Get the refusal letter, understand the exact reasons, and address each one with new evidence in your application."
+            "warning": "A past refusal doesn't mean you can't apply again - but you need to explain what's different now.",
+            "help": "If you were refused before, you'll need to:\n1. Explain why you were refused\n2. Show what has changed since then\n3. Provide stronger evidence this time",
+            "action_if_yes": "Get your old refusal letter and address each reason. Show what's changed - new job, more savings, stronger ties, etc."
         },
         {
             "id": "criminal_record",
-            "question": "Do you have any criminal convictions?",
+            "question": "Do you have any criminal record? (including DUI)",
             "type": "boolean",
             "required": True,
-            "fail_reason": "Criminal inadmissibility may prevent entry to Canada. You may need a Temporary Resident Permit or Criminal Rehabilitation.",
-            "help": "This includes DUIs, theft, assault, fraud, or any conviction. Even old or minor offenses must be declared.",
-            "action_if_yes": "Options: Apply for Criminal Rehabilitation (if 5+ years since completion of sentence) or Temporary Resident Permit. Consult an immigration lawyer."
+            "fail_reason": "A criminal record can make you inadmissible to Canada.",
+            "help": "This includes ANY conviction - even old ones, even minor ones, even DUIs. Be honest - lying is worse than the conviction itself.",
+            "action_if_yes": "You may need:\n• Criminal Rehabilitation (if 5+ years since sentence completed)\n• Temporary Resident Permit\n\nConsider consulting an immigration lawyer."
         },
         {
             "id": "overstay",
-            "question": "Have you ever overstayed a visa in any country?",
+            "question": "Have you ever stayed longer than allowed on any visa, in any country?",
             "type": "boolean",
             "required": True,
-            "fail_reason": "Previous overstays are a significant concern and may result in refusal.",
-            "help": "This includes staying past your authorized date in ANY country, not just Canada.",
-            "action_if_yes": "Be honest and explain the circumstances. Provide evidence of compliance since then (stamps showing timely departures)."
+            "fail_reason": "Overstaying a visa is a serious concern for immigration officers.",
+            "help": "This means staying past your authorized date anywhere - not just Canada.",
+            "action_if_yes": "Be honest about it. Explain the circumstances and show you've followed rules since then."
         }
     ],
     "work_permit": [
         {
             "id": "job_offer",
-            "question": "Do you have a valid job offer from a Canadian employer?",
+            "question": "Do you have a job offer from a Canadian employer?",
             "type": "boolean",
             "required": True,
-            "fail_reason": "Most work permits require a job offer from a Canadian employer with an LMIA or LMIA-exempt position.",
-            "help": "A valid job offer includes:\n• Company name and address\n• Job title and duties\n• Salary and benefits\n• Start date and duration\n• LMIA number (if applicable)",
-            "action_if_no": "Options: Apply through International Experience Canada (IEC) if eligible, find an employer willing to sponsor you, or explore Provincial Nominee Programs."
+            "fail_reason": "Most work permits require a job offer from a Canadian employer.",
+            "help": "Your job offer should include:\n• Company name and address\n• Your job title and duties\n• Salary and benefits\n• Start date\n• LMIA number (if applicable)",
+            "action_if_no": "Options:\n• International Experience Canada (IEC) - for youth from certain countries\n• Provincial Nominee Programs\n• Find an employer willing to hire foreign workers\n\n🔗 Check IEC eligibility: canada.ca/iec"
         },
         {
             "id": "lmia_status",
-            "question": "Does your employer have an approved LMIA or is the position LMIA-exempt?",
+            "question": "Has your employer gotten LMIA approval, or is your job LMIA-exempt?",
             "type": "select",
-            "options": ["Yes, LMIA approved", "Yes, LMIA-exempt (e.g., CUSMA, intra-company transfer)", "No/Don't know", "Applying under IEC (Working Holiday)"],
+            "options": ["Yes - LMIA approved", "Yes - LMIA-exempt (CUSMA, intra-company transfer, etc.)", "No / I don't know", "I'm applying through IEC (Working Holiday)"],
             "required": True,
-            "help": "LMIA (Labour Market Impact Assessment) proves no Canadian was available for the job.\n\nLMIA-exempt categories include:\n• CUSMA/USMCA professionals\n• Intra-company transferees\n• International agreements\n• Significant benefit to Canada"
+            "help": "LMIA = Labour Market Impact Assessment. It proves no Canadian was available for the job.\n\nLMIA-exempt jobs include:\n• CUSMA/USMCA professionals (US/Mexico citizens)\n• Intra-company transfers\n• International agreements\n• Significant benefit to Canada\n\nAsk your employer if you're not sure!"
         },
         {
             "id": "valid_passport",
             "question": "Do you have a valid passport?",
             "type": "boolean",
             "required": True,
-            "fail_reason": "You need a valid passport to apply for a work permit.",
-            "help": "Passport should be valid for the duration of your intended work permit.",
+            "fail_reason": "You need a valid passport to get a work permit.",
+            "help": "Your passport should be valid for the length of your work permit.",
             "action_if_no": "Renew your passport before applying."
         },
         {
             "id": "qualifications",
-            "question": "Do you have the qualifications, education, or experience required for the job?",
+            "question": "Do you have the education or experience needed for this job?",
             "type": "boolean",
             "required": True,
-            "fail_reason": "You must demonstrate you're qualified for the position offered.",
-            "help": "Gather:\n• Educational credentials (degrees, diplomas, certificates)\n• Professional licenses if required\n• Reference letters from previous employers\n• Resume/CV showing relevant experience",
-            "action_if_no": "Get your credentials assessed by WES or another designated organization. Obtain reference letters from past employers."
+            "fail_reason": "You need to prove you're qualified for the job.",
+            "help": "Gather:\n• Degrees, diplomas, certificates\n• Professional licenses (if required)\n• Reference letters from past employers\n• Your resume\n\n🔗 Get credentials assessed: wes.org/ca",
+            "action_if_no": "Get your credentials assessed by WES (World Education Services) and collect reference letters from previous employers."
         },
         {
             "id": "criminal_record",
-            "question": "Do you have any criminal convictions?",
+            "question": "Do you have any criminal record?",
             "type": "boolean",
             "required": True,
-            "fail_reason": "Criminal inadmissibility may prevent you from obtaining a work permit.",
+            "fail_reason": "A criminal record can prevent you from getting a work permit.",
             "help": "All convictions must be declared, including DUIs.",
-            "action_if_yes": "Apply for Criminal Rehabilitation or Temporary Resident Permit. Consult an immigration lawyer."
+            "action_if_yes": "You may need Criminal Rehabilitation or a Temporary Resident Permit. Consult an immigration lawyer."
         },
         {
             "id": "medical_exam",
-            "question": "Are you willing to undergo a medical exam if required?",
+            "question": "Are you okay with doing a medical exam if needed?",
             "type": "boolean",
             "required": True,
-            "fail_reason": "Medical exams are mandatory for certain work permits.",
-            "help": "Medical exams are required if:\n• Working in healthcare, childcare, or education\n• Staying longer than 6 months\n• Coming from certain countries\n\nCost: $200-400 CAD at an IRCC-approved physician."
+            "fail_reason": "Medical exams are required for certain work permits.",
+            "help": "You'll need a medical exam if:\n• Working in healthcare, childcare, or education\n• Staying longer than 6 months\n• Coming from certain countries\n\nCost: $200-400 CAD\n\n🔗 Find a doctor: secure.cic.gc.ca/pp-md/pp-list.aspx"
         },
         {
             "id": "leave_canada",
-            "question": "Will you leave Canada when your work permit expires?",
+            "question": "Will you leave Canada when your work permit ends?",
             "type": "boolean",
             "required": True,
-            "fail_reason": "You must demonstrate intent to leave Canada at the end of your authorized stay.",
-            "help": "Show ties to home country similar to visitor visa requirements."
+            "fail_reason": "You must show you'll leave when your permit expires.",
+            "help": "Show ties to your home country - property, family, job prospects, etc."
         }
     ],
     "super_visa": [
         {
-            "id": "relationship",
-            "question": "What is your relationship to the person inviting you to Canada?",
+            "id": "who_are_you",
+            "question": "Who are you in this application?",
             "type": "select",
-            "options": ["Parent", "Grandparent", "Not a parent or grandparent"],
+            "options": ["I am the parent/grandparent who wants to visit Canada", "I am the child/grandchild in Canada helping my parent apply"],
             "required": True,
-            "fail_value": "Not a parent or grandparent",
-            "fail_reason": "Super Visa is only available to parents and grandparents of Canadian citizens or permanent residents.",
-            "help": "Super Visa is specifically for parents and grandparents. If you're another relative, consider a regular visitor visa instead."
+            "help": "This helps us ask the right questions. Either way, we'll guide you through what's needed!"
+        },
+        {
+            "id": "relationship",
+            "question": "What is your relationship?",
+            "type": "select",
+            "options": ["Parent visiting child in Canada", "Grandparent visiting grandchild in Canada", "Other relationship"],
+            "required": True,
+            "fail_value": "Other relationship",
+            "fail_reason": "Super Visa is only for parents and grandparents. For other relatives, apply for a regular Visitor Visa instead.",
+            "help": "Super Visa is specifically for parents and grandparents of Canadian citizens or permanent residents. It allows stays of up to 5 years at a time!"
         },
         {
             "id": "host_status",
-            "question": "Is your child/grandchild a Canadian citizen or permanent resident?",
+            "question": "Is the person in Canada a Canadian citizen or permanent resident?",
             "type": "boolean",
             "required": True,
-            "fail_reason": "Your child or grandchild must be a Canadian citizen or permanent resident to invite you on a Super Visa.",
-            "help": "They'll need to provide proof: Canadian passport, citizenship certificate, or PR card.",
-            "action_if_no": "Wait until they obtain PR status, or apply for a regular visitor visa instead."
+            "fail_reason": "The child/grandchild in Canada must be a citizen or permanent resident.",
+            "help": "They'll need to show proof:\n• Canadian passport, OR\n• Citizenship certificate, OR\n• PR card (Permanent Resident card)",
+            "action_if_no": "Wait until they get PR status, or apply for a regular Visitor Visa instead."
         },
         {
             "id": "family_size",
-            "question": "How many people are in your child/grandchild's household?",
+            "question": "How many people live in the Canadian household?",
             "type": "number",
             "min": 1,
             "max": 10,
             "required": True,
-            "help": "Count everyone living in the home:\n• Your child/grandchild\n• Their spouse/partner\n• Their children\n• Any other dependents\n\nThis determines the minimum income requirement (LICO+30%)."
+            "help": "Count everyone living in the home:\n• The child/grandchild\n• Their spouse/partner\n• Their children\n• Anyone else they support\n\nThis number determines the minimum income needed."
         },
         {
             "id": "host_income",
-            "question": "What is your child/grandchild's annual gross income (before taxes)?",
+            "question": "What is the Canadian household's yearly income (before taxes)?",
             "type": "number",
             "required": True,
-            "help": "This is their total income BEFORE deductions. Sources can include:\n• Employment income (T4)\n• Self-employment income\n• Spouse's income (can be combined)\n• Investment income\n\nThey'll need to provide Notice of Assessment (NOA) from CRA."
+            "help": "This is the GROSS income (before deductions). You can combine:\n• Employment income\n• Spouse's income\n• Self-employment income\n• Investment income\n\n📄 Get your Notice of Assessment from CRA:\n🔗 CRA My Account: canada.ca/my-cra-account\n📞 CRA Phone: 1-800-959-8281"
         },
         {
             "id": "medical_insurance",
-            "question": "Will you purchase Canadian medical insurance valid for at least 1 year with minimum $100,000 coverage?",
+            "question": "Will you buy Canadian medical insurance for at least 1 year?",
             "type": "boolean",
             "required": True,
-            "fail_reason": "Super Visa requires proof of private medical insurance from a Canadian insurance company, valid for at least 1 year with minimum $100,000 coverage.",
-            "help": "Requirements:\n• From a Canadian insurance company\n• Minimum $100,000 coverage\n• Valid for at least 1 year from entry\n• Covers healthcare, hospitalization, repatriation\n\nCost: $1,000-3,000/year depending on age and health.",
-            "action_if_no": "Get quotes from Canadian insurers like Manulife, Blue Cross, or TuGo. Purchase before submitting your application."
+            "fail_reason": "Super Visa requires medical insurance from a Canadian company.",
+            "help": "Requirements:\n✓ From a CANADIAN insurance company\n✓ At least $100,000 coverage\n✓ Valid for minimum 1 year\n✓ Covers healthcare, hospital, repatriation\n\nCost: Usually $1,000-3,000/year depending on age\n\nPopular providers:\n• Manulife\n• Blue Cross\n• TuGo\n• Allianz",
+            "action_if_no": "You must buy this insurance - it's mandatory. Get quotes before applying so you know the cost."
         },
         {
             "id": "valid_passport",
-            "question": "Do you have a valid passport?",
+            "question": "Does the visitor have a valid passport?",
             "type": "boolean",
             "required": True,
-            "fail_reason": "You need a valid passport to apply for a Super Visa.",
-            "help": "Passport should be valid for at least 2 years (Super Visa can be valid up to 10 years).",
-            "action_if_no": "Renew your passport before applying."
+            "fail_reason": "A valid passport is required.",
+            "help": "The passport should be valid for at least 2 years (Super Visa can last up to 10 years).",
+            "action_if_no": "Renew the passport before applying."
         },
         {
             "id": "medical_exam",
-            "question": "Are you willing to complete an immigration medical exam?",
+            "question": "Is the visitor willing to do a medical exam?",
             "type": "boolean",
             "required": True,
-            "fail_reason": "A medical exam from an IRCC-approved panel physician is mandatory for Super Visa.",
-            "help": "Find a panel physician at IRCC's website. Cost: $200-400. Results are sent directly to IRCC.",
-            "action_if_no": "Medical exam is mandatory - there's no way around this requirement."
+            "fail_reason": "A medical exam is mandatory for Super Visa.",
+            "help": "The exam must be done by an IRCC-approved doctor (called a 'panel physician').\n\nCost: $200-400 CAD\nResults go directly to IRCC.\n\n🔗 Find a panel physician: secure.cic.gc.ca/pp-md/pp-list.aspx",
+            "action_if_no": "This is mandatory - there's no way around it. The exam checks for conditions that could be a health risk or cost to Canada."
         },
         {
             "id": "criminal_record",
-            "question": "Do you have any criminal convictions?",
+            "question": "Does the visitor have any criminal record?",
             "type": "boolean",
             "required": True,
-            "fail_reason": "Criminal inadmissibility may prevent you from obtaining a Super Visa.",
-            "help": "All convictions must be declared.",
-            "action_if_yes": "Apply for Criminal Rehabilitation (if eligible) or Temporary Resident Permit."
+            "fail_reason": "A criminal record can prevent entry to Canada.",
+            "help": "This includes any conviction, even old or minor ones.",
+            "action_if_yes": "Options: Criminal Rehabilitation (if eligible) or Temporary Resident Permit. Consider consulting an immigration lawyer."
         },
         {
             "id": "previous_refusal",
-            "question": "Have you ever been refused a Canadian visa?",
+            "question": "Has the visitor ever been refused a Canadian visa?",
             "type": "boolean",
             "required": True,
-            "warning": "Previous refusals don't automatically disqualify you, but you should address the reasons in your application.",
-            "help": "If refused before, explain what has changed and provide new supporting evidence.",
-            "action_if_yes": "Get your GCMS notes to understand exact refusal reasons. Address each one in your new application."
+            "warning": "A past refusal doesn't disqualify you, but you need to address it.",
+            "help": "If refused before, explain what has changed and provide stronger evidence.",
+            "action_if_yes": "Get GCMS notes to see exact refusal reasons. Address each one in the new application.\n\n📞 IRCC Call Centre: 1-888-242-2100"
         }
     ]
 }
@@ -1118,26 +1140,28 @@ async def assess_eligibility(data: EligibilityInput):
             {"priority": "medium", "action": "Gather 3-6 months of bank statements showing sufficient funds and consistent balance"},
             {"priority": "medium", "action": "Get an employment letter stating your position, salary, and approved leave dates"},
             {"priority": "medium", "action": "Prepare a detailed travel itinerary (flights, accommodation, activities)"},
-            {"priority": "low", "action": "Collect proof of ties: property documents, family photos, business registration, etc."},
+            {"priority": "low", "action": "Collect proof of ties: property documents, family photos, business registration, utility bills, etc."},
+            {"priority": "low", "action": "Check current processing times and apply online\n🔗 IRCC Visitor Visa: canada.ca/en/immigration-refugees-citizenship/services/visit-canada.html"},
         ])
-        if answers.get("purpose") == "Visiting family/friends":
-            action_plan.append({"priority": "medium", "action": "Request an invitation letter from your host in Canada with their contact info and status"})
+        if answers.get("purpose") in ["Visiting family or friends", "Visiting family/friends"]:
+            action_plan.append({"priority": "medium", "action": "Request an invitation letter from your host in Canada with their contact info, status, and address"})
     
     elif app_type == "work_permit":
         action_plan.extend([
             {"priority": "high", "action": "Obtain a detailed job offer letter with: company info, job title, duties, salary, start date, and LMIA number (if applicable)"},
-            {"priority": "medium", "action": "Get your educational credentials assessed by WES or another designated organization"},
+            {"priority": "medium", "action": "Get your educational credentials assessed\n🔗 WES Canada: wes.org/ca"},
             {"priority": "medium", "action": "Collect reference letters from previous employers confirming your experience"},
-            {"priority": "low", "action": "Check if your occupation requires a medical exam (healthcare, childcare, education, or 6+ month stay)"},
+            {"priority": "low", "action": "Check if your occupation requires a medical exam (healthcare, childcare, education, or 6+ month stay)\n🔗 Find a doctor: secure.cic.gc.ca/pp-md/pp-list.aspx"},
         ])
     
     elif app_type == "super_visa":
         action_plan.extend([
             {"priority": "high", "action": "Have your child/grandchild prepare a signed Letter of Invitation with their status, address, and commitment to support you"},
-            {"priority": "high", "action": "Gather your host's income proof: Notice of Assessment (NOA), T4 slips, employment letter, recent pay stubs"},
-            {"priority": "high", "action": "Get quotes for Canadian medical insurance ($100,000+ coverage, 1 year minimum) from Manulife, Blue Cross, or TuGo"},
-            {"priority": "medium", "action": "Book your medical exam with an IRCC-approved panel physician (find one at ircc.canada.ca)"},
-            {"priority": "medium", "action": "Gather proof of your ties to home country (property, pension, family responsibilities)"},
+            {"priority": "high", "action": "Gather your host's income proof:\n• Notice of Assessment (NOA) - get from CRA My Account\n• T4 slips\n• Employment letter\n• Recent pay stubs\n\n🔗 CRA My Account: canada.ca/my-cra-account\n📞 CRA Phone: 1-800-959-8281"},
+            {"priority": "high", "action": "Get quotes for Canadian medical insurance ($100,000+ coverage, 1 year minimum)\n\nPopular providers:\n• Manulife: manulife.ca\n• Blue Cross: bluecross.ca\n• TuGo: tugo.com"},
+            {"priority": "medium", "action": "Book your medical exam with an IRCC-approved panel physician\n🔗 Find a doctor: secure.cic.gc.ca/pp-md/pp-list.aspx"},
+            {"priority": "medium", "action": "Gather proof of ties to home country (property, pension, family responsibilities)"},
+            {"priority": "low", "action": "Check current processing times and requirements\n🔗 IRCC Super Visa: canada.ca/en/immigration-refugees-citizenship/services/visit-canada/parent-grandparent-super-visa.html\n📞 IRCC Call Centre: 1-888-242-2100"},
         ])
     
     # Sort action plan by priority
