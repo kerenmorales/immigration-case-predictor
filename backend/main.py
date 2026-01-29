@@ -81,10 +81,10 @@ class PredictionResponse(BaseModel):
     probabilities: dict
     factors: list
     model_type: str
-    risk_level: str
-    risk_description: str
-    data_source: dict
-    historical_context: str
+    risk_level: Optional[str] = None
+    risk_description: Optional[str] = None
+    data_source: Optional[dict] = None
+    historical_context: Optional[str] = None
 
 
 # Historical stats from training data
