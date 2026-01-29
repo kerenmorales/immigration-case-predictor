@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { supabase } from './supabase'
 
 // Use environment variable, or detect Railway production, or fallback to localhost
 const API_URL = import.meta.env.VITE_API_URL || 
@@ -7,15 +8,57 @@ const API_URL = import.meta.env.VITE_API_URL ||
     : 'http://localhost:8000')
 
 function App() {
+  const [user, setUser] = useState(null)
+  const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('predictor')
   const [sponsorshipData, setSponsorshipData] = useState({})
+
+  useEffect(() => {
+    // Check current session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null)
+      setLoading(false)
+    })
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut()
+    setSponsorshipData({})
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-gray-500">Loading...</div>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return <AuthPage />
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-6">
-        <div className="max-w-5xl mx-auto px-4">
-          <h1 className="text-2xl font-bold">🇨🇦 Immigration Law Assistant</h1>
-          <p className="text-indigo-100 mt-1">AI-powered tools for immigration lawyers</p>
+        <div className="max-w-5xl mx-auto px-4 flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-bold">🇨🇦 Immigration Law Assistant</h1>
+            <p className="text-indigo-100 mt-1">AI-powered tools for immigration lawyers</p>
+          </div>
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-indigo-200">{user.email}</span>
+            <button onClick={handleSignOut} className="text-sm bg-white/20 hover:bg-white/30 px-3 py-1 rounded">
+              Sign Out
+            </button>
+          </div>
         </div>
       </header>
 
@@ -40,20 +83,128 @@ function App() {
             >
               Form Reports
             </button>
+            <button
+              onClick={() => setActiveTab('history')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'history' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+            >
+              My History
+            </button>
           </nav>
         </div>
       </div>
 
       <main className="max-w-5xl mx-auto py-8 px-4">
-        {activeTab === 'predictor' && <CasePredictor />}
-        {activeTab === 'sponsorship' && <SponsorshipAssistant formData={sponsorshipData} setFormData={setSponsorshipData} />}
+        {activeTab === 'predictor' && <CasePredictor user={user} />}
+        {activeTab === 'sponsorship' && <SponsorshipAssistant formData={sponsorshipData} setFormData={setSponsorshipData} user={user} />}
         {activeTab === 'reports' && <FormReports formData={sponsorshipData} />}
+        {activeTab === 'history' && <UserHistory user={user} />}
       </main>
     </div>
   )
 }
 
-function CasePredictor() {
+function AuthPage() {
+  const [isLogin, setIsLogin] = useState(true)
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const [message, setMessage] = useState(null)
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setLoading(true)
+    setError(null)
+    setMessage(null)
+
+    try {
+      if (isLogin) {
+        const { error } = await supabase.auth.signInWithPassword({ email, password })
+        if (error) throw error
+      } else {
+        const { error } = await supabase.auth.signUp({ email, password })
+        if (error) throw error
+        setMessage('Check your email for a confirmation link!')
+      }
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-indigo-600 to-purple-700 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-gray-800">🇨🇦 Immigration Law Assistant</h1>
+          <p className="text-gray-500 mt-2">AI-powered tools for immigration lawyers</p>
+        </div>
+
+        <div className="flex mb-6 bg-gray-100 rounded-lg p-1">
+          <button
+            onClick={() => setIsLogin(true)}
+            className={`flex-1 py-2 rounded-md text-sm font-medium transition ${isLogin ? 'bg-white shadow text-indigo-600' : 'text-gray-500'}`}
+          >
+            Sign In
+          </button>
+          <button
+            onClick={() => setIsLogin(false)}
+            className={`flex-1 py-2 rounded-md text-sm font-medium transition ${!isLogin ? 'bg-white shadow text-indigo-600' : 'text-gray-500'}`}
+          >
+            Sign Up
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              placeholder="you@example.com"
+              required
+            />
+          </div>
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              placeholder="••••••••"
+              required
+              minLength={6}
+            />
+          </div>
+
+          {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">{error}</div>}
+          {message && <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-700 rounded-lg text-sm">{message}</div>}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-indigo-600 text-white py-3 rounded-lg font-medium hover:bg-indigo-700 disabled:bg-gray-400 transition"
+          >
+            {loading ? 'Please wait...' : (isLogin ? 'Sign In' : 'Create Account')}
+          </button>
+        </form>
+
+        <p className="mt-6 text-center text-sm text-gray-500">
+          {isLogin ? "Don't have an account? " : "Already have an account? "}
+          <button onClick={() => setIsLogin(!isLogin)} className="text-indigo-600 font-medium hover:underline">
+            {isLogin ? 'Sign up' : 'Sign in'}
+          </button>
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function CasePredictor({ user }) {
   const [caseText, setCaseText] = useState('')
   const [country, setCountry] = useState('')
   const [claimType, setClaimType] = useState('')
@@ -71,8 +222,24 @@ function CasePredictor() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: caseText, country_of_origin: country || null, claim_type: claimType || null })
       })
-      if (!response.ok) throw new Error('Prediction failed')
-      setPrediction(await response.json())
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}))
+        throw new Error(errData.detail || 'Prediction failed')
+      }
+      const result = await response.json()
+      setPrediction(result)
+
+      // Save to Supabase
+      await supabase.from('predictions').insert({
+        user_id: user.id,
+        case_text: caseText,
+        country_of_origin: country || null,
+        claim_type: claimType || null,
+        prediction: result.prediction,
+        confidence: result.confidence,
+        risk_level: result.risk_level,
+        factors: result.factors
+      })
     } catch (err) {
       setError(err.message)
     } finally {
@@ -87,7 +254,7 @@ function CasePredictor() {
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">Case Description / Facts</label>
-            <textarea value={caseText} onChange={(e) => setCaseText(e.target.value)} rows={6} className="w-full border border-gray-300 rounded-md p-3 focus:ring-2 focus:ring-indigo-500" placeholder="Describe the case facts..." required />
+            <textarea value={caseText} onChange={(e) => setCaseText(e.target.value)} rows={6} className="w-full border border-gray-300 rounded-md p-3 focus:ring-2 focus:ring-indigo-500" placeholder="Describe the case facts, including details about the refugee claim, persecution, or immigration application..." required />
           </div>
           <div className="grid grid-cols-2 gap-4 mb-6">
             <div>
@@ -115,7 +282,6 @@ function CasePredictor() {
         <div className="bg-white rounded-lg shadow-md p-6">
           <h3 className="text-lg font-semibold mb-4">Prediction Results</h3>
           
-          {/* Main Prediction */}
           <div className="flex items-center gap-4 mb-6">
             <div className={`px-4 py-2 rounded-full font-semibold text-lg ${prediction.prediction === 'Allowed' ? 'text-green-600 bg-green-50' : 'text-red-600 bg-red-50'}`}>
               {prediction.prediction}
@@ -129,12 +295,10 @@ function CasePredictor() {
             </div>
           </div>
 
-          {/* Risk Assessment */}
           <div className="mb-6 p-4 bg-gray-50 rounded-lg">
             <p className="text-sm text-gray-700">{prediction.risk_description}</p>
           </div>
 
-          {/* Confidence Bar */}
           <div className="mb-6">
             <p className="text-sm font-medium text-gray-700 mb-2">Model Confidence</p>
             <div className="w-full bg-gray-200 rounded-full h-4">
@@ -143,7 +307,6 @@ function CasePredictor() {
             <p className="text-sm text-gray-600 mt-1">{(prediction.confidence * 100).toFixed(1)}%</p>
           </div>
 
-          {/* Legal Factors */}
           {prediction.factors && prediction.factors.length > 0 && (
             <div className="mb-6">
               <p className="text-sm font-medium text-gray-700 mb-3">Key Legal Factors Detected</p>
@@ -161,26 +324,18 @@ function CasePredictor() {
             </div>
           )}
 
-          {/* Historical Context */}
           <div className="mb-6 p-4 border border-indigo-100 bg-indigo-50 rounded-lg">
             <p className="text-sm font-medium text-indigo-800 mb-1">📊 Historical Context</p>
             <p className="text-sm text-indigo-700">{prediction.historical_context}</p>
           </div>
 
-          {/* Data Source */}
           <div className="mb-6 text-sm text-gray-500">
             <p className="font-medium">Data Source:</p>
             <p>{prediction.data_source?.name} • {prediction.data_source?.cases?.toLocaleString()} cases ({prediction.data_source?.period})</p>
-            {prediction.data_source?.url && (
-              <a href={prediction.data_source.url} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">
-                Learn more about the dataset →
-              </a>
-            )}
           </div>
 
-          {/* Disclaimer */}
           <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-md">
-            <p className="text-sm text-yellow-800"><strong>⚠️ Disclaimer:</strong> This prediction is for informational purposes only and should not be considered legal advice. Actual case outcomes depend on many factors not captured by this model. Always consult with a qualified immigration lawyer.</p>
+            <p className="text-sm text-yellow-800"><strong>⚠️ Disclaimer:</strong> This prediction is for informational purposes only. Always consult with a qualified immigration lawyer.</p>
           </div>
         </div>
       )}
@@ -188,13 +343,14 @@ function CasePredictor() {
   )
 }
 
-function SponsorshipAssistant({ formData, setFormData }) {
-  const [step, setStep] = useState(0) // 0=start, 1=sponsor, 2=applicant, 3=relationship, 4=complete
+
+function SponsorshipAssistant({ formData, setFormData, user }) {
+  const [step, setStep] = useState(0)
   const [downloading, setDownloading] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   const updateField = (field, value) => setFormData(prev => ({ ...prev, [field]: value }))
 
-  // Validation for each step
   const isStep1Valid = () => {
     const required = ['sponsor_family_name', 'sponsor_given_name', 'sponsor_dob', 'sponsor_sex', 
       'sponsor_country_birth', 'sponsor_citizenship', 'sponsor_phone', 'sponsor_email',
@@ -215,19 +371,30 @@ function SponsorshipAssistant({ formData, setFormData }) {
     return required.every(field => formData[field]?.trim())
   }
 
+  const saveForm = async () => {
+    setSaving(true)
+    try {
+      await supabase.from('sponsorship_forms').insert({
+        user_id: user.id,
+        form_data: formData,
+        status: 'completed'
+      })
+    } catch (err) {
+      console.error('Error saving form:', err)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const downloadFilledPDFs = async () => {
     setDownloading(true)
     try {
-      console.log('Fetching from:', `${API_URL}/api/fill-forms`)
       const response = await fetch(`${API_URL}/api/fill-forms`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
       })
-      if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`HTTP ${response.status}: ${errorText}`)
-      }
+      if (!response.ok) throw new Error('Failed to generate PDF')
       const blob = await response.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -236,8 +403,7 @@ function SponsorshipAssistant({ formData, setFormData }) {
       a.click()
       URL.revokeObjectURL(url)
     } catch (err) {
-      console.error('PDF download error:', err)
-      alert('Error downloading PDF: ' + err.message + '\n\nAPI URL: ' + API_URL)
+      alert('Error downloading PDF: ' + err.message)
     } finally {
       setDownloading(false)
     }
@@ -251,7 +417,6 @@ function SponsorshipAssistant({ formData, setFormData }) {
     a.click()
   }
 
-  // Start screen
   if (step === 0) {
     return (
       <div className="bg-white rounded-lg shadow-md p-8 text-center">
@@ -271,7 +436,6 @@ function SponsorshipAssistant({ formData, setFormData }) {
     )
   }
 
-  // Complete screen
   if (step === 4) {
     return (
       <div className="bg-white rounded-lg shadow-md p-8">
@@ -284,13 +448,11 @@ function SponsorshipAssistant({ formData, setFormData }) {
               <h4 className="font-medium text-indigo-600 mb-2">Sponsor</h4>
               <p className="text-sm">{formData.sponsor_family_name}, {formData.sponsor_given_name}</p>
               <p className="text-sm text-gray-500">{formData.sponsor_email}</p>
-              <p className="text-sm text-gray-500">{formData.sponsor_city}, {formData.sponsor_province}</p>
             </div>
             <div className="bg-gray-50 p-4 rounded-lg">
               <h4 className="font-medium text-indigo-600 mb-2">Applicant</h4>
               <p className="text-sm">{formData.applicant_family_name}, {formData.applicant_given_name}</p>
               <p className="text-sm text-gray-500">{formData.applicant_citizenship}</p>
-              <p className="text-sm text-gray-500">Passport: {formData.applicant_passport}</p>
             </div>
             <div className="bg-gray-50 p-4 rounded-lg">
               <h4 className="font-medium text-indigo-600 mb-2">Relationship</h4>
@@ -301,7 +463,7 @@ function SponsorshipAssistant({ formData, setFormData }) {
         </div>
 
         <div className="flex flex-wrap gap-4 justify-center">
-          <button onClick={downloadFilledPDFs} disabled={downloading} className="bg-green-600 text-white px-6 py-3 rounded-full font-medium hover:bg-green-700 disabled:bg-gray-400">
+          <button onClick={() => { saveForm(); downloadFilledPDFs(); }} disabled={downloading || saving} className="bg-green-600 text-white px-6 py-3 rounded-full font-medium hover:bg-green-700 disabled:bg-gray-400">
             {downloading ? 'Generating...' : '📄 Download Summary PDF'}
           </button>
           <button onClick={downloadJSON} className="bg-indigo-600 text-white px-6 py-3 rounded-full font-medium hover:bg-indigo-700">
@@ -315,10 +477,8 @@ function SponsorshipAssistant({ formData, setFormData }) {
     )
   }
 
-  // Form steps
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
-      {/* Progress */}
       <div className="mb-6">
         <div className="flex justify-between text-sm text-gray-500 mb-2">
           <span className={step >= 1 ? 'text-indigo-600 font-medium' : ''}>1. Sponsor</span>
@@ -330,26 +490,25 @@ function SponsorshipAssistant({ formData, setFormData }) {
         </div>
       </div>
 
-      {/* Step 1: Sponsor Info */}
       {step === 1 && (
         <div>
           <h3 className="text-lg font-semibold mb-4">Sponsor Information (IMM 1344)</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Family Name (Surname) *</label>
-              <input type="text" value={formData.sponsor_family_name || ''} onChange={(e) => updateField('sponsor_family_name', e.target.value)} className="w-full border rounded-md p-2" placeholder="e.g., Smith" required />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Family Name *</label>
+              <input type="text" value={formData.sponsor_family_name || ''} onChange={(e) => updateField('sponsor_family_name', e.target.value)} className="w-full border rounded-md p-2" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Given Name(s) *</label>
-              <input type="text" value={formData.sponsor_given_name || ''} onChange={(e) => updateField('sponsor_given_name', e.target.value)} className="w-full border rounded-md p-2" placeholder="e.g., John Michael" required />
+              <input type="text" value={formData.sponsor_given_name || ''} onChange={(e) => updateField('sponsor_given_name', e.target.value)} className="w-full border rounded-md p-2" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Date of Birth *</label>
-              <input type="date" value={formData.sponsor_dob || ''} onChange={(e) => updateField('sponsor_dob', e.target.value)} className="w-full border rounded-md p-2" required />
+              <input type="date" value={formData.sponsor_dob || ''} onChange={(e) => updateField('sponsor_dob', e.target.value)} className="w-full border rounded-md p-2" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Sex *</label>
-              <select value={formData.sponsor_sex || ''} onChange={(e) => updateField('sponsor_sex', e.target.value)} className="w-full border rounded-md p-2" required>
+              <select value={formData.sponsor_sex || ''} onChange={(e) => updateField('sponsor_sex', e.target.value)} className="w-full border rounded-md p-2">
                 <option value="">Select...</option>
                 <option value="Male">Male</option>
                 <option value="Female">Female</option>
@@ -358,85 +517,81 @@ function SponsorshipAssistant({ formData, setFormData }) {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Country of Birth *</label>
-              <input type="text" value={formData.sponsor_country_birth || ''} onChange={(e) => updateField('sponsor_country_birth', e.target.value)} className="w-full border rounded-md p-2" placeholder="e.g., Canada" required />
+              <input type="text" value={formData.sponsor_country_birth || ''} onChange={(e) => updateField('sponsor_country_birth', e.target.value)} className="w-full border rounded-md p-2" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Citizenship Status *</label>
-              <select value={formData.sponsor_citizenship || ''} onChange={(e) => updateField('sponsor_citizenship', e.target.value)} className="w-full border rounded-md p-2" required>
+              <select value={formData.sponsor_citizenship || ''} onChange={(e) => updateField('sponsor_citizenship', e.target.value)} className="w-full border rounded-md p-2">
                 <option value="">Select...</option>
                 <option value="Canadian Citizen">Canadian Citizen</option>
                 <option value="Permanent Resident">Permanent Resident</option>
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
-              <input type="tel" value={formData.sponsor_phone || ''} onChange={(e) => updateField('sponsor_phone', e.target.value)} className="w-full border rounded-md p-2" placeholder="(123) 456-7890" required />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Phone *</label>
+              <input type="tel" value={formData.sponsor_phone || ''} onChange={(e) => updateField('sponsor_phone', e.target.value)} className="w-full border rounded-md p-2" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email Address *</label>
-              <input type="email" value={formData.sponsor_email || ''} onChange={(e) => updateField('sponsor_email', e.target.value)} className="w-full border rounded-md p-2" placeholder="email@example.com" required />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+              <input type="email" value={formData.sponsor_email || ''} onChange={(e) => updateField('sponsor_email', e.target.value)} className="w-full border rounded-md p-2" />
             </div>
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">Street Address *</label>
-              <input type="text" value={formData.sponsor_street || ''} onChange={(e) => updateField('sponsor_street', e.target.value)} className="w-full border rounded-md p-2" placeholder="123 Main Street, Apt 4" required />
+              <input type="text" value={formData.sponsor_street || ''} onChange={(e) => updateField('sponsor_street', e.target.value)} className="w-full border rounded-md p-2" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">City *</label>
-              <input type="text" value={formData.sponsor_city || ''} onChange={(e) => updateField('sponsor_city', e.target.value)} className="w-full border rounded-md p-2" required />
+              <input type="text" value={formData.sponsor_city || ''} onChange={(e) => updateField('sponsor_city', e.target.value)} className="w-full border rounded-md p-2" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Province *</label>
-              <select value={formData.sponsor_province || ''} onChange={(e) => updateField('sponsor_province', e.target.value)} className="w-full border rounded-md p-2" required>
+              <select value={formData.sponsor_province || ''} onChange={(e) => updateField('sponsor_province', e.target.value)} className="w-full border rounded-md p-2">
                 <option value="">Select...</option>
                 <option value="AB">Alberta</option>
                 <option value="BC">British Columbia</option>
                 <option value="MB">Manitoba</option>
                 <option value="NB">New Brunswick</option>
-                <option value="NL">Newfoundland and Labrador</option>
+                <option value="NL">Newfoundland</option>
                 <option value="NS">Nova Scotia</option>
-                <option value="NT">Northwest Territories</option>
-                <option value="NU">Nunavut</option>
                 <option value="ON">Ontario</option>
-                <option value="PE">Prince Edward Island</option>
+                <option value="PE">PEI</option>
                 <option value="QC">Quebec</option>
                 <option value="SK">Saskatchewan</option>
-                <option value="YT">Yukon</option>
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Postal Code *</label>
-              <input type="text" value={formData.sponsor_postal || ''} onChange={(e) => updateField('sponsor_postal', e.target.value.toUpperCase())} className="w-full border rounded-md p-2" placeholder="A1A 1A1" maxLength={7} required />
+              <input type="text" value={formData.sponsor_postal || ''} onChange={(e) => updateField('sponsor_postal', e.target.value.toUpperCase())} className="w-full border rounded-md p-2" maxLength={7} />
             </div>
           </div>
           <div className="mt-6 flex justify-between items-center">
-            <span className="text-sm text-gray-500">{isStep1Valid() ? '✓ All fields complete' : 'Please fill all required fields'}</span>
-            <button onClick={() => setStep(2)} disabled={!isStep1Valid()} className="bg-indigo-600 text-white px-6 py-2 rounded-full hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed">
-              Next: Applicant Info →
+            <span className="text-sm text-gray-500">{isStep1Valid() ? '✓ Complete' : 'Fill all fields'}</span>
+            <button onClick={() => setStep(2)} disabled={!isStep1Valid()} className="bg-indigo-600 text-white px-6 py-2 rounded-full hover:bg-indigo-700 disabled:bg-gray-300">
+              Next →
             </button>
           </div>
         </div>
       )}
 
-      {/* Step 2: Applicant Info */}
       {step === 2 && (
         <div>
           <h3 className="text-lg font-semibold mb-4">Applicant Information (IMM 0008)</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Family Name (Surname) *</label>
-              <input type="text" value={formData.applicant_family_name || ''} onChange={(e) => updateField('applicant_family_name', e.target.value)} className="w-full border rounded-md p-2" placeholder="As shown on passport" required />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Family Name *</label>
+              <input type="text" value={formData.applicant_family_name || ''} onChange={(e) => updateField('applicant_family_name', e.target.value)} className="w-full border rounded-md p-2" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Given Name(s) *</label>
-              <input type="text" value={formData.applicant_given_name || ''} onChange={(e) => updateField('applicant_given_name', e.target.value)} className="w-full border rounded-md p-2" placeholder="As shown on passport" required />
+              <input type="text" value={formData.applicant_given_name || ''} onChange={(e) => updateField('applicant_given_name', e.target.value)} className="w-full border rounded-md p-2" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Date of Birth *</label>
-              <input type="date" value={formData.applicant_dob || ''} onChange={(e) => updateField('applicant_dob', e.target.value)} className="w-full border rounded-md p-2" required />
+              <input type="date" value={formData.applicant_dob || ''} onChange={(e) => updateField('applicant_dob', e.target.value)} className="w-full border rounded-md p-2" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Sex *</label>
-              <select value={formData.applicant_sex || ''} onChange={(e) => updateField('applicant_sex', e.target.value)} className="w-full border rounded-md p-2" required>
+              <select value={formData.applicant_sex || ''} onChange={(e) => updateField('applicant_sex', e.target.value)} className="w-full border rounded-md p-2">
                 <option value="">Select...</option>
                 <option value="Male">Male</option>
                 <option value="Female">Female</option>
@@ -445,82 +600,79 @@ function SponsorshipAssistant({ formData, setFormData }) {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Country of Birth *</label>
-              <input type="text" value={formData.applicant_country_birth || ''} onChange={(e) => updateField('applicant_country_birth', e.target.value)} className="w-full border rounded-md p-2" required />
+              <input type="text" value={formData.applicant_country_birth || ''} onChange={(e) => updateField('applicant_country_birth', e.target.value)} className="w-full border rounded-md p-2" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Country of Citizenship *</label>
-              <input type="text" value={formData.applicant_citizenship || ''} onChange={(e) => updateField('applicant_citizenship', e.target.value)} className="w-full border rounded-md p-2" placeholder="e.g., India, Philippines" required />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Citizenship *</label>
+              <input type="text" value={formData.applicant_citizenship || ''} onChange={(e) => updateField('applicant_citizenship', e.target.value)} className="w-full border rounded-md p-2" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Passport Number *</label>
-              <input type="text" value={formData.applicant_passport || ''} onChange={(e) => updateField('applicant_passport', e.target.value)} className="w-full border rounded-md p-2" required />
+              <input type="text" value={formData.applicant_passport || ''} onChange={(e) => updateField('applicant_passport', e.target.value)} className="w-full border rounded-md p-2" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Passport Expiry Date *</label>
-              <input type="date" value={formData.applicant_passport_expiry || ''} onChange={(e) => updateField('applicant_passport_expiry', e.target.value)} className="w-full border rounded-md p-2" required />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Passport Expiry *</label>
+              <input type="date" value={formData.applicant_passport_expiry || ''} onChange={(e) => updateField('applicant_passport_expiry', e.target.value)} className="w-full border rounded-md p-2" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Marital Status *</label>
-              <select value={formData.applicant_marital || ''} onChange={(e) => updateField('applicant_marital', e.target.value)} className="w-full border rounded-md p-2" required>
+              <select value={formData.applicant_marital || ''} onChange={(e) => updateField('applicant_marital', e.target.value)} className="w-full border rounded-md p-2">
                 <option value="">Select...</option>
                 <option value="Married">Married</option>
                 <option value="Common-Law">Common-Law</option>
                 <option value="Single">Single</option>
-                <option value="Divorced">Divorced</option>
-                <option value="Widowed">Widowed</option>
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
-              <input type="tel" value={formData.applicant_phone || ''} onChange={(e) => updateField('applicant_phone', e.target.value)} className="w-full border rounded-md p-2" placeholder="Include country code" required />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Phone *</label>
+              <input type="tel" value={formData.applicant_phone || ''} onChange={(e) => updateField('applicant_phone', e.target.value)} className="w-full border rounded-md p-2" />
             </div>
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email Address *</label>
-              <input type="email" value={formData.applicant_email || ''} onChange={(e) => updateField('applicant_email', e.target.value)} className="w-full border rounded-md p-2" required />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+              <input type="email" value={formData.applicant_email || ''} onChange={(e) => updateField('applicant_email', e.target.value)} className="w-full border rounded-md p-2" />
             </div>
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">Current Address *</label>
-              <input type="text" value={formData.applicant_address || ''} onChange={(e) => updateField('applicant_address', e.target.value)} className="w-full border rounded-md p-2" placeholder="Full address including country" required />
+              <input type="text" value={formData.applicant_address || ''} onChange={(e) => updateField('applicant_address', e.target.value)} className="w-full border rounded-md p-2" />
             </div>
           </div>
           <div className="mt-6 flex justify-between items-center">
-            <button onClick={() => setStep(1)} className="text-gray-600 px-6 py-2 hover:text-gray-800">← Back</button>
-            <span className="text-sm text-gray-500">{isStep2Valid() ? '✓ All fields complete' : 'Please fill all required fields'}</span>
-            <button onClick={() => setStep(3)} disabled={!isStep2Valid()} className="bg-indigo-600 text-white px-6 py-2 rounded-full hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed">
-              Next: Relationship →
+            <button onClick={() => setStep(1)} className="text-gray-600 hover:text-gray-800">← Back</button>
+            <span className="text-sm text-gray-500">{isStep2Valid() ? '✓ Complete' : 'Fill all fields'}</span>
+            <button onClick={() => setStep(3)} disabled={!isStep2Valid()} className="bg-indigo-600 text-white px-6 py-2 rounded-full hover:bg-indigo-700 disabled:bg-gray-300">
+              Next →
             </button>
           </div>
         </div>
       )}
 
-      {/* Step 3: Relationship Info */}
       {step === 3 && (
         <div>
           <h3 className="text-lg font-semibold mb-4">Relationship Information (IMM 5532)</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Marriage Date *</label>
-              <input type="date" value={formData.marriage_date || ''} onChange={(e) => updateField('marriage_date', e.target.value)} className="w-full border rounded-md p-2" required />
+              <input type="date" value={formData.marriage_date || ''} onChange={(e) => updateField('marriage_date', e.target.value)} className="w-full border rounded-md p-2" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Marriage Location *</label>
-              <input type="text" value={formData.marriage_location || ''} onChange={(e) => updateField('marriage_location', e.target.value)} className="w-full border rounded-md p-2" placeholder="City, Country" required />
+              <input type="text" value={formData.marriage_location || ''} onChange={(e) => updateField('marriage_location', e.target.value)} className="w-full border rounded-md p-2" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Date You First Met *</label>
-              <input type="date" value={formData.first_met_date || ''} onChange={(e) => updateField('first_met_date', e.target.value)} className="w-full border rounded-md p-2" required />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Date First Met *</label>
+              <input type="date" value={formData.first_met_date || ''} onChange={(e) => updateField('first_met_date', e.target.value)} className="w-full border rounded-md p-2" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Where You First Met *</label>
-              <input type="text" value={formData.first_met_location || ''} onChange={(e) => updateField('first_met_location', e.target.value)} className="w-full border rounded-md p-2" placeholder="City, Country or Online" required />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Where First Met *</label>
+              <input type="text" value={formData.first_met_location || ''} onChange={(e) => updateField('first_met_location', e.target.value)} className="w-full border rounded-md p-2" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Relationship Start Date *</label>
-              <input type="date" value={formData.relationship_start || ''} onChange={(e) => updateField('relationship_start', e.target.value)} className="w-full border rounded-md p-2" required />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Relationship Start *</label>
+              <input type="date" value={formData.relationship_start || ''} onChange={(e) => updateField('relationship_start', e.target.value)} className="w-full border rounded-md p-2" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Currently Living Together? *</label>
-              <select value={formData.living_together || ''} onChange={(e) => updateField('living_together', e.target.value)} className="w-full border rounded-md p-2" required>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Living Together? *</label>
+              <select value={formData.living_together || ''} onChange={(e) => updateField('living_together', e.target.value)} className="w-full border rounded-md p-2">
                 <option value="">Select...</option>
                 <option value="Yes">Yes</option>
                 <option value="No">No</option>
@@ -528,10 +680,10 @@ function SponsorshipAssistant({ formData, setFormData }) {
             </div>
           </div>
           <div className="mt-6 flex justify-between items-center">
-            <button onClick={() => setStep(2)} className="text-gray-600 px-6 py-2 hover:text-gray-800">← Back</button>
-            <span className="text-sm text-gray-500">{isStep3Valid() ? '✓ All fields complete' : 'Please fill all required fields'}</span>
-            <button onClick={() => setStep(4)} disabled={!isStep3Valid()} className="bg-green-600 text-white px-6 py-2 rounded-full hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed">
-              Complete Application ✓
+            <button onClick={() => setStep(2)} className="text-gray-600 hover:text-gray-800">← Back</button>
+            <span className="text-sm text-gray-500">{isStep3Valid() ? '✓ Complete' : 'Fill all fields'}</span>
+            <button onClick={() => setStep(4)} disabled={!isStep3Valid()} className="bg-green-600 text-white px-6 py-2 rounded-full hover:bg-green-700 disabled:bg-gray-300">
+              Complete ✓
             </button>
           </div>
         </div>
@@ -539,6 +691,7 @@ function SponsorshipAssistant({ formData, setFormData }) {
     </div>
   )
 }
+
 
 function FormReports({ formData }) {
   const [activeForm, setActiveForm] = useState('imm1344')
@@ -563,132 +716,181 @@ function FormReports({ formData }) {
 
   return (
     <div>
-      {/* Form Tabs */}
       <div className="bg-white rounded-lg shadow-md mb-6">
         <div className="flex border-b">
-          <button
-            onClick={() => setActiveForm('imm1344')}
-            className={`flex-1 py-4 px-4 text-center font-medium ${activeForm === 'imm1344' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50' : 'text-gray-500 hover:bg-gray-50'}`}
-          >
-            IMM 1344<br /><span className="text-xs font-normal">Application to Sponsor</span>
+          <button onClick={() => setActiveForm('imm1344')} className={`flex-1 py-4 text-center font-medium ${activeForm === 'imm1344' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50' : 'text-gray-500'}`}>
+            IMM 1344<br /><span className="text-xs font-normal">Sponsor</span>
           </button>
-          <button
-            onClick={() => setActiveForm('imm0008')}
-            className={`flex-1 py-4 px-4 text-center font-medium ${activeForm === 'imm0008' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50' : 'text-gray-500 hover:bg-gray-50'}`}
-          >
-            IMM 0008<br /><span className="text-xs font-normal">Generic Application</span>
+          <button onClick={() => setActiveForm('imm0008')} className={`flex-1 py-4 text-center font-medium ${activeForm === 'imm0008' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50' : 'text-gray-500'}`}>
+            IMM 0008<br /><span className="text-xs font-normal">Applicant</span>
           </button>
-          <button
-            onClick={() => setActiveForm('imm5532')}
-            className={`flex-1 py-4 px-4 text-center font-medium ${activeForm === 'imm5532' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50' : 'text-gray-500 hover:bg-gray-50'}`}
-          >
-            IMM 5532<br /><span className="text-xs font-normal">Relationship Info</span>
+          <button onClick={() => setActiveForm('imm5532')} className={`flex-1 py-4 text-center font-medium ${activeForm === 'imm5532' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50' : 'text-gray-500'}`}>
+            IMM 5532<br /><span className="text-xs font-normal">Relationship</span>
           </button>
         </div>
       </div>
 
-      {/* IMM 1344 - Sponsor */}
       {activeForm === 'imm1344' && (
         <div className="bg-white rounded-lg shadow-md p-6">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h2 className="text-xl font-bold text-gray-800">IMM 1344 - Application to Sponsor</h2>
-              <p className="text-sm text-gray-500">Sponsorship Agreement and Undertaking</p>
-            </div>
-            <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-sm font-medium">🍁 IRCC</span>
-          </div>
-          
+          <h2 className="text-xl font-bold mb-4">IMM 1344 - Application to Sponsor</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
             <div>
-              <h3 className="font-semibold text-indigo-600 mb-3 mt-4">Personal Information</h3>
-              <Field label="Family Name (Surname)" value={formData.sponsor_family_name} />
+              <Field label="Family Name" value={formData.sponsor_family_name} />
               <Field label="Given Name(s)" value={formData.sponsor_given_name} />
               <Field label="Date of Birth" value={formData.sponsor_dob} />
               <Field label="Sex" value={formData.sponsor_sex} />
               <Field label="Country of Birth" value={formData.sponsor_country_birth} />
-              <Field label="Citizenship Status" value={formData.sponsor_citizenship} />
+              <Field label="Citizenship" value={formData.sponsor_citizenship} />
             </div>
             <div>
-              <h3 className="font-semibold text-indigo-600 mb-3 mt-4">Contact Information</h3>
-              <Field label="Phone Number" value={formData.sponsor_phone} />
-              <Field label="Email Address" value={formData.sponsor_email} />
-              <Field label="Street Address" value={formData.sponsor_street} />
+              <Field label="Phone" value={formData.sponsor_phone} />
+              <Field label="Email" value={formData.sponsor_email} />
+              <Field label="Address" value={formData.sponsor_street} />
               <Field label="City" value={formData.sponsor_city} />
-              <Field label="Province/Territory" value={formData.sponsor_province} />
+              <Field label="Province" value={formData.sponsor_province} />
               <Field label="Postal Code" value={formData.sponsor_postal} />
             </div>
           </div>
         </div>
       )}
 
-      {/* IMM 0008 - Applicant */}
       {activeForm === 'imm0008' && (
         <div className="bg-white rounded-lg shadow-md p-6">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h2 className="text-xl font-bold text-gray-800">IMM 0008 - Generic Application Form</h2>
-              <p className="text-sm text-gray-500">Principal Applicant Information</p>
-            </div>
-            <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-sm font-medium">🍁 IRCC</span>
-          </div>
-          
+          <h2 className="text-xl font-bold mb-4">IMM 0008 - Generic Application</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
             <div>
-              <h3 className="font-semibold text-indigo-600 mb-3 mt-4">Personal Details</h3>
-              <Field label="Family Name (Surname)" value={formData.applicant_family_name} />
+              <Field label="Family Name" value={formData.applicant_family_name} />
               <Field label="Given Name(s)" value={formData.applicant_given_name} />
               <Field label="Date of Birth" value={formData.applicant_dob} />
               <Field label="Sex" value={formData.applicant_sex} />
               <Field label="Country of Birth" value={formData.applicant_country_birth} />
-              <Field label="Country of Citizenship" value={formData.applicant_citizenship} />
-              <Field label="Marital Status" value={formData.applicant_marital} />
+              <Field label="Citizenship" value={formData.applicant_citizenship} />
             </div>
             <div>
-              <h3 className="font-semibold text-indigo-600 mb-3 mt-4">Passport & Contact</h3>
               <Field label="Passport Number" value={formData.applicant_passport} />
-              <Field label="Passport Expiry Date" value={formData.applicant_passport_expiry} />
-              <Field label="Phone Number" value={formData.applicant_phone} />
-              <Field label="Email Address" value={formData.applicant_email} />
-              <Field label="Current Address" value={formData.applicant_address} />
+              <Field label="Passport Expiry" value={formData.applicant_passport_expiry} />
+              <Field label="Marital Status" value={formData.applicant_marital} />
+              <Field label="Phone" value={formData.applicant_phone} />
+              <Field label="Email" value={formData.applicant_email} />
+              <Field label="Address" value={formData.applicant_address} />
             </div>
           </div>
         </div>
       )}
 
-      {/* IMM 5532 - Relationship */}
       {activeForm === 'imm5532' && (
         <div className="bg-white rounded-lg shadow-md p-6">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h2 className="text-xl font-bold text-gray-800">IMM 5532 - Relationship Information</h2>
-              <p className="text-sm text-gray-500">Spouse/Common-Law Partner Questionnaire</p>
-            </div>
-            <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-sm font-medium">🍁 IRCC</span>
-          </div>
-          
+          <h2 className="text-xl font-bold mb-4">IMM 5532 - Relationship Information</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
             <div>
-              <h3 className="font-semibold text-indigo-600 mb-3 mt-4">Marriage Details</h3>
-              <Field label="Date of Marriage" value={formData.marriage_date} />
-              <Field label="Place of Marriage" value={formData.marriage_location} />
-              <Field label="Currently Living Together" value={formData.living_together} />
+              <Field label="Marriage Date" value={formData.marriage_date} />
+              <Field label="Marriage Location" value={formData.marriage_location} />
+              <Field label="Living Together" value={formData.living_together} />
             </div>
             <div>
-              <h3 className="font-semibold text-indigo-600 mb-3 mt-4">How You Met</h3>
-              <Field label="Date You First Met" value={formData.first_met_date} />
-              <Field label="Where You First Met" value={formData.first_met_location} />
-              <Field label="Relationship Start Date" value={formData.relationship_start} />
+              <Field label="Date First Met" value={formData.first_met_date} />
+              <Field label="Where First Met" value={formData.first_met_location} />
+              <Field label="Relationship Start" value={formData.relationship_start} />
             </div>
           </div>
         </div>
       )}
+    </div>
+  )
+}
 
-      {/* Print/Download Note */}
-      <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-        <p className="text-sm text-yellow-800">
-          <strong>Note:</strong> Use the "Download Summary PDF" button in the Sponsorship Form Assistant tab to get a printable version of all forms.
-        </p>
+function UserHistory({ user }) {
+  const [predictions, setPredictions] = useState([])
+  const [forms, setForms] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState('predictions')
+
+  useEffect(() => {
+    loadHistory()
+  }, [user])
+
+  const loadHistory = async () => {
+    setLoading(true)
+    try {
+      const [predRes, formRes] = await Promise.all([
+        supabase.from('predictions').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(20),
+        supabase.from('sponsorship_forms').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(10)
+      ])
+      setPredictions(predRes.data || [])
+      setForms(formRes.data || [])
+    } catch (err) {
+      console.error('Error loading history:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (loading) {
+    return <div className="bg-white rounded-lg shadow-md p-8 text-center text-gray-500">Loading history...</div>
+  }
+
+  return (
+    <div>
+      <div className="bg-white rounded-lg shadow-md mb-6">
+        <div className="flex border-b">
+          <button onClick={() => setActiveTab('predictions')} className={`flex-1 py-4 text-center font-medium ${activeTab === 'predictions' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500'}`}>
+            Predictions ({predictions.length})
+          </button>
+          <button onClick={() => setActiveTab('forms')} className={`flex-1 py-4 text-center font-medium ${activeTab === 'forms' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500'}`}>
+            Saved Forms ({forms.length})
+          </button>
+        </div>
       </div>
+
+      {activeTab === 'predictions' && (
+        <div className="space-y-4">
+          {predictions.length === 0 ? (
+            <div className="bg-white rounded-lg shadow-md p-8 text-center text-gray-500">
+              No predictions yet. Try the Case Outcome Predictor!
+            </div>
+          ) : (
+            predictions.map((p) => (
+              <div key={p.id} className="bg-white rounded-lg shadow-md p-4">
+                <div className="flex justify-between items-start mb-2">
+                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${p.prediction === 'Allowed' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                    {p.prediction}
+                  </span>
+                  <span className="text-sm text-gray-400">{new Date(p.created_at).toLocaleDateString()}</span>
+                </div>
+                <p className="text-sm text-gray-600 line-clamp-2">{p.case_text?.substring(0, 150)}...</p>
+                <div className="mt-2 text-sm text-gray-500">
+                  Confidence: {(p.confidence * 100).toFixed(1)}% • {p.risk_level} confidence
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {activeTab === 'forms' && (
+        <div className="space-y-4">
+          {forms.length === 0 ? (
+            <div className="bg-white rounded-lg shadow-md p-8 text-center text-gray-500">
+              No saved forms yet. Complete a sponsorship application!
+            </div>
+          ) : (
+            forms.map((f) => (
+              <div key={f.id} className="bg-white rounded-lg shadow-md p-4">
+                <div className="flex justify-between items-start mb-2">
+                  <span className="px-3 py-1 rounded-full text-sm font-medium bg-indigo-100 text-indigo-700">
+                    {f.status}
+                  </span>
+                  <span className="text-sm text-gray-400">{new Date(f.created_at).toLocaleDateString()}</span>
+                </div>
+                <p className="text-sm font-medium">
+                  {f.form_data?.sponsor_family_name}, {f.form_data?.sponsor_given_name} → {f.form_data?.applicant_family_name}, {f.form_data?.applicant_given_name}
+                </p>
+                <p className="text-sm text-gray-500">Marriage: {f.form_data?.marriage_date} in {f.form_data?.marriage_location}</p>
+              </div>
+            ))
+          )}
+        </div>
+      )}
     </div>
   )
 }
