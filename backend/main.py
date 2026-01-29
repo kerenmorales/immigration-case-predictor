@@ -810,6 +810,14 @@ IEC_COUNTRIES = [
 ELIGIBILITY_QUESTIONS = {
     "visitor_visa": [
         {
+            "id": "language",
+            "question": "What language would you prefer? / ¿Qué idioma prefiere? / Quelle langue préférez-vous?",
+            "type": "select",
+            "options": ["English", "Español (Spanish)", "Français (French)"],
+            "required": True,
+            "help": "Select your preferred language. / Seleccione su idioma preferido. / Sélectionnez votre langue préférée."
+        },
+        {
             "id": "country",
             "question": "What country are you from?",
             "type": "text",
@@ -823,6 +831,23 @@ ELIGIBILITY_QUESTIONS = {
             "options": ["Tourism/Vacation", "Visiting family or friends", "Business meetings", "Medical treatment", "Other"],
             "required": True,
             "help": "Pick the main reason for your trip. This helps us know what documents you'll need."
+        },
+        {
+            "id": "trip_duration",
+            "question": "How many days do you plan to stay in Canada?",
+            "type": "number",
+            "min": 1,
+            "max": 180,
+            "required": True,
+            "help": "Enter the number of days you plan to visit. Visitor visas typically allow stays up to 6 months (180 days)."
+        },
+        {
+            "id": "accommodation_type",
+            "question": "Where will you stay?",
+            "type": "select",
+            "options": ["Hotel/Airbnb (paid)", "Staying with family or friends (free)", "Other paid accommodation"],
+            "required": True,
+            "help": "This helps us estimate your trip costs. Staying with family/friends saves a lot of money!"
         },
         {
             "id": "valid_passport",
@@ -1183,6 +1208,47 @@ async def assess_eligibility(data: EligibilityInput):
             surplus = host_income - required_income
             warnings.append(f"✓ Income requirement met! Required: ${required_income:,} CAD. Your host's income: ${host_income:,} CAD (${surplus:,} above minimum).")
     
+    # Budget calculation for visitor visa
+    budget_estimate = None
+    if app_type == "visitor_visa":
+        trip_days = answers.get("trip_duration", 0)
+        accommodation = answers.get("accommodation_type", "")
+        
+        if trip_days > 0:
+            # Estimate costs in CAD
+            if "free" in accommodation.lower() or "family" in accommodation.lower():
+                accommodation_cost = 0
+                accommodation_note = "Staying with family/friends"
+            else:
+                accommodation_cost = trip_days * 150  # Average $150/night
+                accommodation_note = f"{trip_days} nights × $150 CAD"
+            
+            daily_expenses = trip_days * 75  # Food, transport, activities
+            flight_estimate = 1500  # Average round-trip
+            visa_fee = 100  # Visitor visa fee
+            
+            total_estimate = accommodation_cost + daily_expenses + flight_estimate + visa_fee
+            
+            budget_estimate = {
+                "trip_days": trip_days,
+                "breakdown": [
+                    {"item": "Accommodation", "amount": accommodation_cost, "note": accommodation_note},
+                    {"item": "Daily expenses (food, transport, activities)", "amount": daily_expenses, "note": f"{trip_days} days × $75 CAD"},
+                    {"item": "Round-trip flights (estimate)", "amount": flight_estimate, "note": "Varies by origin"},
+                    {"item": "Visa application fee", "amount": visa_fee, "note": "Government fee"},
+                ],
+                "total": total_estimate,
+                "currency": "CAD",
+                "exchange_link": "https://www.xe.com/currencyconverter/convert/?From=CAD",
+                "note": "This is an estimate. Actual costs vary based on your travel dates, origin, and spending habits."
+            }
+            
+            warnings.append(
+                f"💰 Estimated trip budget: ${total_estimate:,} CAD for {trip_days} days\n\n"
+                f"You should show at least this amount in your bank statements.\n\n"
+                f"🔗 Check exchange rates: xe.com/currencyconverter"
+            )
+    
     # Determine overall eligibility
     score = max(0, min(100, score))
     
@@ -1244,7 +1310,8 @@ async def assess_eligibility(data: EligibilityInput):
         "issues": issues,
         "warnings": warnings,
         "action_plan": action_plan,
-        "income_requirement": get_lico_requirement(int(answers.get("family_size", 1))) if app_type == "super_visa" else None
+        "income_requirement": get_lico_requirement(int(answers.get("family_size", 1))) if app_type == "super_visa" else None,
+        "budget_estimate": budget_estimate
     }
 
 

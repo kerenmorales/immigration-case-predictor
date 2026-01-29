@@ -424,6 +424,33 @@ function EligibilityCheck() {
               </div>
             )}
             
+            {result.budget_estimate && (
+              <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-6">
+                <h3 className="font-semibold text-blue-800 mb-4">💰 Estimated Trip Budget ({result.budget_estimate.trip_days} days)</h3>
+                <div className="space-y-2 mb-4">
+                  {result.budget_estimate.breakdown.map((item, i) => (
+                    <div key={i} className="flex justify-between text-sm">
+                      <span className="text-blue-700">{item.item}</span>
+                      <span className="font-medium text-blue-800">${item.amount.toLocaleString()} CAD</span>
+                    </div>
+                  ))}
+                  <div className="border-t border-blue-300 pt-2 mt-2 flex justify-between">
+                    <span className="font-semibold text-blue-800">Total Estimate</span>
+                    <span className="font-bold text-blue-900 text-lg">${result.budget_estimate.total.toLocaleString()} CAD</span>
+                  </div>
+                </div>
+                <p className="text-xs text-blue-600 mb-2">{result.budget_estimate.note}</p>
+                <a 
+                  href={result.budget_estimate.exchange_link} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-sm text-blue-700 hover:text-blue-900 underline"
+                >
+                  🔗 Check exchange rates to your currency →
+                </a>
+              </div>
+            )}
+            
             {result.income_requirement && (
               <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <h3 className="font-semibold text-blue-800 mb-2">💰 Income Requirement (LICO+30%)</h3>
