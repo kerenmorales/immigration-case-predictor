@@ -186,42 +186,48 @@ async def predict_outcome(case: CaseInput):
     if case.claim_type:
         full_text += f" Claim type: {case.claim_type}."
     
-    # Get prediction based on model type
-    if model_type == 'transformer':
-        prediction, probs = predict_transformer(full_text)
-    else:
-        prediction, probs = predict_sklearn(full_text)
-    
-    confidence = float(max(probs))
-    prob_dict = {OUTCOME_LABELS[i]: float(p) for i, p in enumerate(probs)}
-    factors = extract_factors(full_text)
-    prediction_label = OUTCOME_LABELS[prediction]
-    
-    # Get risk assessment
-    risk_level, risk_description = get_risk_assessment(prediction_label, confidence)
-    
-    # Historical context
-    if prediction_label == "Allowed":
-        historical_context = f"Historically, {HISTORICAL_STATS['allowed_rate']}% of cases in our dataset were allowed. Your prediction confidence of {confidence*100:.1f}% suggests this case {'exceeds' if confidence > 0.5 else 'is below'} typical patterns."
-    else:
-        historical_context = f"Historically, {HISTORICAL_STATS['dismissed_rate']}% of cases in our dataset were dismissed. Your prediction confidence of {confidence*100:.1f}% suggests {'strong' if confidence > 0.7 else 'moderate'} alignment with dismissal patterns."
-    
-    return PredictionResponse(
-        prediction=prediction_label,
-        confidence=confidence,
-        probabilities=prob_dict,
-        factors=factors,
-        model_type=model_type,
-        risk_level=risk_level,
-        risk_description=risk_description,
-        data_source={
-            "name": f"{HISTORICAL_STATS['dataset']} - {HISTORICAL_STATS['source']}",
-            "cases": HISTORICAL_STATS['total_cases'],
-            "period": HISTORICAL_STATS['date_range'],
-            "url": "https://refugeelab.ca/"
-        },
-        historical_context=historical_context
-    )
+    try:
+        # Get prediction based on model type
+        if model_type == 'transformer':
+            prediction, probs = predict_transformer(full_text)
+        else:
+            prediction, probs = predict_sklearn(full_text)
+        
+        confidence = float(max(probs))
+        prob_dict = {OUTCOME_LABELS[i]: float(p) for i, p in enumerate(probs)}
+        factors = extract_factors(full_text)
+        prediction_label = OUTCOME_LABELS[prediction]
+        
+        # Get risk assessment
+        risk_level, risk_description = get_risk_assessment(prediction_label, confidence)
+        
+        # Historical context
+        if prediction_label == "Allowed":
+            historical_context = f"Historically, {HISTORICAL_STATS['allowed_rate']}% of cases in our dataset were allowed. Your prediction confidence of {confidence*100:.1f}% suggests this case {'exceeds' if confidence > 0.5 else 'is below'} typical patterns."
+        else:
+            historical_context = f"Historically, {HISTORICAL_STATS['dismissed_rate']}% of cases in our dataset were dismissed. Your prediction confidence of {confidence*100:.1f}% suggests {'strong' if confidence > 0.7 else 'moderate'} alignment with dismissal patterns."
+        
+        return PredictionResponse(
+            prediction=prediction_label,
+            confidence=confidence,
+            probabilities=prob_dict,
+            factors=factors,
+            model_type=model_type,
+            risk_level=risk_level,
+            risk_description=risk_description,
+            data_source={
+                "name": f"{HISTORICAL_STATS['dataset']} - {HISTORICAL_STATS['source']}",
+                "cases": HISTORICAL_STATS['total_cases'],
+                "period": HISTORICAL_STATS['date_range'],
+                "url": "https://refugeelab.ca/"
+            },
+            historical_context=historical_context
+        )
+    except Exception as e:
+        print(f"Prediction error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 def extract_factors(text: str) -> list:
