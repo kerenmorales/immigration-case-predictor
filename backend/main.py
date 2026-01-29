@@ -785,9 +785,37 @@ LINKS = {
     "lico_table": "https://www.canada.ca/en/immigration-refugees-citizenship/services/visit-canada/parent-grandparent-super-visa/eligibility.html",
 }
 
+# Visa-exempt countries (don't need visitor visa, only eTA)
+VISA_EXEMPT_COUNTRIES = [
+    "United States", "United Kingdom", "Australia", "France", "Germany", "Italy", "Japan", 
+    "South Korea", "Netherlands", "Spain", "Sweden", "Switzerland", "Belgium", "Austria",
+    "Denmark", "Finland", "Greece", "Ireland", "Luxembourg", "Norway", "Portugal", 
+    "New Zealand", "Singapore", "Hong Kong", "Taiwan", "Chile", "Mexico", "Israel",
+    "Andorra", "Bahamas", "Barbados", "Brunei", "Croatia", "Cyprus", "Czech Republic",
+    "Estonia", "Hungary", "Iceland", "Latvia", "Liechtenstein", "Lithuania", "Malta",
+    "Monaco", "Papua New Guinea", "Poland", "Samoa", "San Marino", "Slovakia", "Slovenia",
+    "Solomon Islands", "UAE", "United Arab Emirates"
+]
+
+# IEC (Working Holiday) eligible countries
+IEC_COUNTRIES = [
+    "Australia", "Austria", "Belgium", "Chile", "Costa Rica", "Croatia", "Czech Republic",
+    "Denmark", "Estonia", "France", "Germany", "Greece", "Hong Kong", "Ireland", "Italy",
+    "Japan", "South Korea", "Latvia", "Lithuania", "Luxembourg", "Mexico", "Netherlands",
+    "New Zealand", "Norway", "Poland", "Portugal", "Slovakia", "Slovenia", "Spain", 
+    "Sweden", "Switzerland", "Taiwan", "Ukraine", "United Kingdom"
+]
+
 
 ELIGIBILITY_QUESTIONS = {
     "visitor_visa": [
+        {
+            "id": "country",
+            "question": "What country are you from?",
+            "type": "text",
+            "required": True,
+            "help": "Enter your country of citizenship. This determines if you need a visa or just an eTA (Electronic Travel Authorization)."
+        },
         {
             "id": "purpose",
             "question": "Why do you want to visit Canada?",
@@ -861,6 +889,13 @@ ELIGIBILITY_QUESTIONS = {
     ],
     "work_permit": [
         {
+            "id": "country",
+            "question": "What country are you from?",
+            "type": "text",
+            "required": True,
+            "help": "Enter your country of citizenship. This helps determine if you're eligible for special programs like IEC (Working Holiday) or CUSMA."
+        },
+        {
             "id": "job_offer",
             "question": "Do you have a job offer from a Canadian employer?",
             "type": "boolean",
@@ -922,6 +957,13 @@ ELIGIBILITY_QUESTIONS = {
         }
     ],
     "super_visa": [
+        {
+            "id": "country",
+            "question": "What country is the parent/grandparent from?",
+            "type": "text",
+            "required": True,
+            "help": "Enter the country of citizenship of the person who wants to visit Canada."
+        },
         {
             "id": "who_are_you",
             "question": "Who are you in this application?",
@@ -1041,12 +1083,39 @@ async def assess_eligibility(data: EligibilityInput):
     warnings = []
     action_items = []
     score = 100
+    country = answers.get("country", "").strip()
+    
+    # Check country-specific information
+    if country:
+        country_title = country.title()
+        
+        # Visitor visa - check if visa-exempt
+        if app_type == "visitor_visa":
+            is_exempt = any(c.lower() in country.lower() for c in VISA_EXEMPT_COUNTRIES)
+            if is_exempt:
+                warnings.append(f"✓ Good news! Citizens of {country_title} don't need a visitor visa - you only need an eTA (Electronic Travel Authorization), which costs $7 CAD and is usually approved within minutes.\n\n🔗 Apply for eTA: canada.ca/eta")
+            else:
+                warnings.append(f"Citizens of {country_title} need a visitor visa to enter Canada. This assessment will help you prepare your application.")
+        
+        # Work permit - check IEC eligibility
+        if app_type == "work_permit":
+            is_iec = any(c.lower() in country.lower() for c in IEC_COUNTRIES)
+            if is_iec:
+                warnings.append(f"✓ Good news! {country_title} is part of International Experience Canada (IEC). If you're 18-35, you may qualify for a Working Holiday visa without needing a job offer!\n\n🔗 Check IEC: canada.ca/iec")
+            
+            # Check CUSMA eligibility
+            if any(c.lower() in country.lower() for c in ["united states", "usa", "mexico"]):
+                warnings.append(f"✓ As a citizen of {country_title}, you may qualify for CUSMA/USMCA work permits for certain professional occupations without needing an LMIA.")
     
     for q in questions:
         qid = q["id"]
         answer = answers.get(qid)
         
         if answer is None:
+            continue
+        
+        # Skip country field in regular processing
+        if qid == "country":
             continue
         
         # Check for fail conditions
@@ -1080,7 +1149,7 @@ async def assess_eligibility(data: EligibilityInput):
                 issues.append(q["fail_reason"])
                 score -= 30
             
-            if qid == "lmia_status" and answer == "No/Don't know":
+            if qid == "lmia_status" and answer in ["No / I don't know", "No/Don't know"]:
                 issues.append("You need either an LMIA-approved job offer or an LMIA-exempt position to get a work permit.")
                 action_items.append({
                     "priority": "high",

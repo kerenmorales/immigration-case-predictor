@@ -529,6 +529,18 @@ function EligibilityCheck() {
                 </div>
               )}
               
+              {q.type === 'text' && (
+                <div>
+                  <input
+                    type="text"
+                    value={answers[q.id] || ''}
+                    onChange={(e) => handleAnswer(q.id, e.target.value)}
+                    className="w-full border border-slate-300 rounded-lg px-4 py-3 text-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                    placeholder={q.id === 'country' ? 'e.g., India, Philippines, Nigeria...' : 'Enter your answer'}
+                  />
+                </div>
+              )}
+              
               {q.type === 'boolean' && (
                 <div className="flex gap-4">
                   <button
@@ -597,7 +609,7 @@ function EligibilityCheck() {
                 {currentQuestion < questions.length - 1 ? (
                   <button
                     onClick={nextQuestion}
-                    disabled={answers[q.id] === undefined}
+                    disabled={answers[q.id] === undefined || (q.type === 'text' && !answers[q.id]?.trim())}
                     className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium disabled:bg-slate-300 disabled:cursor-not-allowed"
                   >
                     Next Question
@@ -605,7 +617,7 @@ function EligibilityCheck() {
                 ) : (
                   <button
                     onClick={submitAssessment}
-                    disabled={loading || answers[q.id] === undefined}
+                    disabled={loading || answers[q.id] === undefined || (q.type === 'text' && !answers[q.id]?.trim())}
                     className="px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium disabled:bg-slate-300 disabled:cursor-not-allowed"
                   >
                     {loading ? 'Analyzing...' : 'Get Results'}
