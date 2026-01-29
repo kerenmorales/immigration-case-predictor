@@ -433,17 +433,29 @@ function EligibilityCheck() {
               </div>
             )}
             
-            {result.tips.length > 0 && (
+            {result.action_plan && result.action_plan.length > 0 && (
               <div>
-                <h3 className="font-semibold text-slate-800 mb-3">💡 Tips for Your Application</h3>
-                <ul className="space-y-2">
-                  {result.tips.map((tip, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm text-slate-600">
-                      <span className="text-green-500 mt-0.5">✓</span>
-                      {tip}
-                    </li>
+                <h3 className="font-semibold text-slate-800 mb-3">� Your Action Plan</h3>
+                <div className="space-y-3">
+                  {result.action_plan.map((item, i) => (
+                    <div key={i} className={`p-4 rounded-lg border ${
+                      item.priority === 'high' ? 'bg-red-50 border-red-200' :
+                      item.priority === 'medium' ? 'bg-amber-50 border-amber-200' :
+                      'bg-slate-50 border-slate-200'
+                    }`}>
+                      <div className="flex items-start gap-3">
+                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                          item.priority === 'high' ? 'bg-red-200 text-red-800' :
+                          item.priority === 'medium' ? 'bg-amber-200 text-amber-800' :
+                          'bg-slate-200 text-slate-700'
+                        }`}>
+                          {item.priority === 'high' ? 'HIGH' : item.priority === 'medium' ? 'MEDIUM' : 'LOW'}
+                        </span>
+                        <p className="text-sm text-slate-700 whitespace-pre-line flex-1">{item.action}</p>
+                      </div>
+                    </div>
                   ))}
-                </ul>
+                </div>
               </div>
             )}
           </div>
@@ -509,7 +521,13 @@ function EligibilityCheck() {
               <p className="text-sm text-slate-500">Question {currentQuestion + 1}</p>
             </div>
             <div className="p-8">
-              <h2 className="text-xl font-semibold text-slate-800 mb-6">{q.question}</h2>
+              <h2 className="text-xl font-semibold text-slate-800 mb-4">{q.question}</h2>
+              
+              {q.help && (
+                <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <p className="text-sm text-blue-800 whitespace-pre-line">{q.help}</p>
+                </div>
+              )}
               
               {q.type === 'boolean' && (
                 <div className="flex gap-4">
@@ -565,16 +583,6 @@ function EligibilityCheck() {
                     className="w-full border border-slate-300 rounded-lg px-4 py-3 text-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
                     placeholder={q.id === 'host_income' ? 'e.g., 65000' : 'Enter number'}
                   />
-                  {q.id === 'host_income' && (
-                    <p className="mt-2 text-sm text-slate-500">
-                      Enter annual gross income in Canadian dollars (before taxes)
-                    </p>
-                  )}
-                  {q.id === 'family_size' && (
-                    <p className="mt-2 text-sm text-slate-500">
-                      Include your child/grandchild, their spouse, and any dependents living with them
-                    </p>
-                  )}
                 </div>
               )}
 
