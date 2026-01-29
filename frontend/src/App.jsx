@@ -597,8 +597,38 @@ function SponsorshipAssistant({ formData, setFormData, user }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(null)
+  const [chatMessages, setChatMessages] = useState([
+    { role: 'assistant', content: 'Hello! I\'m here to help you with your spousal sponsorship application. You can ask me questions about the process, required documents, eligibility, or anything else related to Canadian immigration sponsorship.' }
+  ])
+  const [chatInput, setChatInput] = useState('')
+  const [chatLoading, setChatLoading] = useState(false)
 
   const updateField = (field, value) => setFormData(prev => ({ ...prev, [field]: value }))
+
+  const handleChatSubmit = async (e) => {
+    e.preventDefault()
+    if (!chatInput.trim()) return
+    
+    const userMessage = chatInput.trim()
+    setChatMessages(prev => [...prev, { role: 'user', content: userMessage }])
+    setChatInput('')
+    setChatLoading(true)
+
+    try {
+      const response = await fetch(`${API_URL}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: userMessage, context: 'sponsorship' })
+      })
+      if (!response.ok) throw new Error('Failed to get response')
+      const data = await response.json()
+      setChatMessages(prev => [...prev, { role: 'assistant', content: data.response }])
+    } catch (err) {
+      setChatMessages(prev => [...prev, { role: 'assistant', content: 'Sorry, I encountered an error. Please try again.' }])
+    } finally {
+      setChatLoading(false)
+    }
+  }
 
   const canProceed = () => {
     if (step === 1) {
@@ -682,6 +712,12 @@ function SponsorshipAssistant({ formData, setFormData, user }) {
       {/* View Toggle */}
       <div className="flex gap-2 mb-6">
         <button
+          onClick={() => setActiveView('chat')}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeView === 'chat' ? 'bg-red-600 text-white' : 'bg-white border border-slate-300 text-slate-600 hover:bg-slate-50'}`}
+        >
+          💬 Chat Assistant
+        </button>
+        <button
           onClick={() => setActiveView('wizard')}
           className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeView === 'wizard' ? 'bg-red-600 text-white' : 'bg-white border border-slate-300 text-slate-600 hover:bg-slate-50'}`}
         >
@@ -695,7 +731,79 @@ function SponsorshipAssistant({ formData, setFormData, user }) {
         </button>
       </div>
 
-      {activeView === 'wizard' ? (
+      {activeView === 'chat' ? (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2">
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden flex flex-col" style={{ height: '600px' }}>
+              <div className="bg-slate-50 px-6 py-4 border-b border-slate-200">
+                <h2 className="text-lg font-semibold text-slate-800">Sponsorship Assistant</h2>
+                <p className="text-sm text-slate-500">Ask questions about spousal sponsorship</p>
+              </div>
+              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                {chatMessages.map((msg, i) => (
+                  <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[80%] rounded-lg px-4 py-3 ${msg.role === 'user' ? 'bg-red-600 text-white' : 'bg-slate-100 text-slate-800'}`}>
+                      <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                    </div>
+                  </div>
+                ))}
+                {chatLoading && (
+                  <div className="flex justify-start">
+                    <div className="bg-slate-100 rounded-lg px-4 py-3">
+                      <p className="text-sm text-slate-500">Thinking...</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <form onSubmit={handleChatSubmit} className="p-4 border-t border-slate-200">
+                <div className="flex gap-3">
+                  <input
+                    type="text"
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    placeholder="Ask about sponsorship requirements, documents, timelines..."
+                    className="flex-1 border border-slate-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                  />
+                  <button
+                    type="submit"
+                    disabled={chatLoading || !chatInput.trim()}
+                    className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium disabled:bg-slate-300 disabled:cursor-not-allowed"
+                  >
+                    Send
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl border border-slate-200 p-6">
+              <h3 className="font-semibold text-slate-800 mb-3">Quick Questions</h3>
+              <div className="space-y-2">
+                {[
+                  'What documents do I need?',
+                  'How long does sponsorship take?',
+                  'What are the eligibility requirements?',
+                  'Can I work while waiting?'
+                ].map((q, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setChatInput(q)}
+                    className="w-full text-left text-sm text-slate-600 hover:text-red-600 hover:bg-slate-50 px-3 py-2 rounded-lg transition-colors"
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
+              <h3 className="font-semibold text-blue-800 mb-2">Need Help?</h3>
+              <p className="text-sm text-blue-700">
+                Use the Form Wizard to fill out your application step by step, or ask questions here first.
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : activeView === 'wizard' ? (
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
           {/* Progress Sidebar */}
           <div className="lg:col-span-1">

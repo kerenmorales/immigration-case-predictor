@@ -489,3 +489,202 @@ async def fill_sponsorship_forms(data: SponsorshipData):
 async def check_forms():
     """Check PDF generation capability."""
     return {"pdf_support": PDF_SUPPORT, "type": "summary_pdf"}
+
+
+@app.post("/generate-pdf-summary")
+async def generate_pdf_summary(data: dict):
+    """Generate a summary PDF with all sponsorship data (alternate endpoint)."""
+    if not PDF_SUPPORT:
+        raise HTTPException(status_code=500, detail="PDF support not available. Install reportlab.")
+    
+    try:
+        pdf_bytes = generate_sponsorship_pdf(data)
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": "attachment; filename=sponsorship_summary.pdf",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Expose-Headers": "Content-Disposition"
+            }
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
+
+
+# ============== Chat Assistant ==============
+
+class ChatInput(BaseModel):
+    message: str
+    context: Optional[str] = None
+
+
+SPONSORSHIP_FAQ = {
+    "documents": """For a spousal sponsorship application, you'll need:
+
+**Sponsor (Canadian citizen/PR):**
+• Proof of status (citizenship certificate, PR card, or passport)
+• Income documents (NOA, T4s, employment letter)
+• Proof of relationship (photos, communication records, joint accounts)
+
+**Applicant (spouse):**
+• Valid passport
+• Birth certificate
+• Police certificates from all countries lived in 6+ months since age 18
+• Medical exam results (from IRCC-approved doctor)
+• Marriage certificate
+• Photos together with dates
+
+**Relationship proof:**
+• Photos together (with dates/locations)
+• Communication records (chat logs, call history)
+• Travel records showing visits
+• Joint financial documents if applicable
+• Letters from family/friends confirming relationship""",
+
+    "timeline": """Current processing times for spousal sponsorship:
+
+**Inland applications (spouse in Canada):** 12-18 months
+**Outland applications (spouse outside Canada):** 12-15 months
+
+Key stages:
+1. **Acknowledgment of Receipt (AOR):** 2-4 weeks after submission
+2. **Eligibility decision:** 3-6 months
+3. **Background checks:** Varies by country
+4. **Medical request:** After eligibility approved
+5. **Final decision:** After all checks complete
+
+Note: Processing times vary and can change. Check IRCC website for current estimates.""",
+
+    "eligibility": """**Sponsor eligibility requirements:**
+• Must be a Canadian citizen or permanent resident
+• Must be 18 years or older
+• Must not be in prison, bankrupt, or under a removal order
+• Must not have sponsored a spouse in the past 5 years (if that relationship ended)
+• Must not have been sponsored as a spouse yourself in the past 5 years
+• Must sign an undertaking to financially support your spouse for 3 years
+
+**Applicant eligibility:**
+• Must be legally married to the sponsor OR
+• Must be in a common-law relationship (12+ months cohabitation) OR
+• Must be in a conjugal relationship (if marriage/cohabitation not possible)
+• Must pass medical and security checks
+• Must not be inadmissible to Canada""",
+
+    "work": """**Can the applicant work while waiting?**
+
+**Inland applications (spouse in Canada):**
+• Can apply for an Open Work Permit (OWP) at the same time as sponsorship
+• OWP allows working for any employer in Canada
+• Processing takes 2-4 months typically
+• Valid until a decision is made on the PR application
+
+**Outland applications (spouse outside Canada):**
+• Cannot work in Canada until they receive their PR visa
+• Must wait outside Canada during processing
+• Can visit Canada as a visitor (if eligible) but cannot work
+
+**After PR approval:**
+• Full work authorization as a permanent resident
+• No restrictions on employment""",
+
+    "cost": """**Spousal sponsorship fees (2024):**
+
+• Sponsorship fee: $75
+• Principal applicant processing fee: $490
+• Right of Permanent Residence Fee (RPRF): $515
+• Biometrics: $85
+
+**Total government fees:** ~$1,165 CAD
+
+**Additional costs to budget for:**
+• Medical exam: $200-400
+• Police certificates: $50-100 per country
+• Translation/notarization: Varies
+• Photos: $15-30
+• Courier/mailing: $50-100
+
+**Optional:**
+• Immigration lawyer/consultant: $2,000-5,000+"""
+}
+
+
+@app.post("/chat")
+async def chat_assistant(chat: ChatInput):
+    """Simple FAQ-based chat assistant for sponsorship questions."""
+    message = chat.message.lower()
+    
+    # Match to FAQ topics
+    if any(word in message for word in ['document', 'need', 'require', 'what do i need', 'checklist']):
+        response = SPONSORSHIP_FAQ["documents"]
+    elif any(word in message for word in ['how long', 'timeline', 'processing', 'time', 'wait']):
+        response = SPONSORSHIP_FAQ["timeline"]
+    elif any(word in message for word in ['eligib', 'qualify', 'requirement', 'can i sponsor', 'who can']):
+        response = SPONSORSHIP_FAQ["eligibility"]
+    elif any(word in message for word in ['work', 'job', 'employ', 'owp', 'work permit']):
+        response = SPONSORSHIP_FAQ["work"]
+    elif any(word in message for word in ['cost', 'fee', 'price', 'how much', 'pay']):
+        response = SPONSORSHIP_FAQ["cost"]
+    elif any(word in message for word in ['inland', 'outland', 'inside canada', 'outside canada']):
+        response = """**Inland vs Outland Sponsorship:**
+
+**Inland (spouse is IN Canada):**
+• Spouse must have valid status in Canada
+• Can apply for Open Work Permit
+• Cannot leave Canada during processing (or application may be abandoned)
+• Processing: 12-18 months
+
+**Outland (spouse is OUTSIDE Canada):**
+• Spouse waits in their home country
+• Cannot work in Canada during processing
+• Can visit Canada as a visitor
+• Processing: 12-15 months
+• Generally faster processing
+
+Choose based on your situation and whether your spouse needs to work in Canada during processing."""
+    elif any(word in message for word in ['common-law', 'common law', 'not married']):
+        response = """**Common-law sponsorship requirements:**
+
+To qualify as common-law partners, you must:
+• Have lived together continuously for at least 12 months
+• Be in a conjugal (marriage-like) relationship
+• Provide proof of cohabitation (lease, bills, mail to same address)
+
+**Evidence needed:**
+• Joint lease or mortgage
+• Joint bank accounts or bills
+• Statutory declarations from both partners
+• Letters from friends/family confirming cohabitation
+• Photos together in shared home
+
+If you cannot live together due to immigration barriers, you may qualify as "conjugal partners" instead."""
+    elif any(word in message for word in ['reject', 'denied', 'refuse', 'appeal']):
+        response = """**If your sponsorship is refused:**
+
+1. **Review the refusal letter** - understand the specific reasons
+2. **Options available:**
+   • Request reconsideration (within 30 days)
+   • Apply to Federal Court for judicial review (within 15-60 days)
+   • Submit a new application addressing the concerns
+
+**Common refusal reasons:**
+• Insufficient proof of genuine relationship
+• Sponsor doesn't meet income requirements
+• Applicant is inadmissible (medical, criminal, misrepresentation)
+• Missing documents
+
+**Tip:** Consider consulting an immigration lawyer if refused."""
+    else:
+        response = """I can help you with questions about Canadian spousal sponsorship. Here are some topics I can assist with:
+
+• **Documents required** - What you need to submit
+• **Processing times** - How long it takes
+• **Eligibility** - Who can sponsor and be sponsored
+• **Work permits** - Can your spouse work while waiting?
+• **Costs and fees** - Government and other expenses
+• **Inland vs Outland** - Which option to choose
+• **Common-law** - Requirements for unmarried couples
+
+What would you like to know more about?"""
+    
+    return {"response": response}
