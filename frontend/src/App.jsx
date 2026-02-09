@@ -1936,7 +1936,8 @@ const [loading, setLoading] = useState(false)
   ]
 
   const addEntry = () => {
-    if (!newEntry.date || !newEntry.content) return
+    if (!newEntry.date || (!newEntry.content && !newEntry.image)) return
+
     setEntries(prev => [...prev, { ...newEntry, id: Date.now() }].sort((a, b) => new Date(a.date) - new Date(b.date)))
     setNewEntry({ type: 'text_message', date: '', content: '', description: '' })
   }
@@ -2052,7 +2053,7 @@ const [loading, setLoading] = useState(false)
             className="w-full border border-slate-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none"
             placeholder="Type or paste text here..."
           />
-          
+
           <div className="mt-3 p-4 border-2 border-dashed border-slate-300 rounded-lg bg-slate-50">
             {newEntry.image ? (
               <div className="relative inline-block">
@@ -2142,6 +2143,7 @@ const [loading, setLoading] = useState(false)
                       Remove
                     </button>
                   </div>
+
                   {entry.description && (
                     <p className="text-sm text-slate-600 italic mb-2">{entry.description}</p>
                   )}
