@@ -2371,12 +2371,14 @@ def generate_proof_pdf(entries: list) -> bytes:
     # Sort entries by date
     sorted_entries = sorted(entries, key=lambda x: x.get('date', ''))
     
-    for i, entry in enumerate(sorted_entries, 1):
+    
+    for i, entry in enumerate(entries, 1):
         entry_type = entry.get('type', 'other')
         entry_date = entry.get('date', 'Unknown date')
         entry_content = entry.get('content', '')
         entry_desc = entry.get('description', '')
-        
+        entry_image = entry.get('image', '')
+
         type_label = type_labels.get(entry_type, '📄 Other')
         
         # Entry header
@@ -2385,6 +2387,33 @@ def generate_proof_pdf(entries: list) -> bytes:
         
         if entry_desc:
             story.append(Paragraph(f"<i>Context: {entry_desc}</i>", meta_style))
+
+            
+        if entry_image:
+            try:
+                import base64
+                from PIL import Image as PILImage
+                from reportlab.platypus import Image as RLImage
+                if entry_image.startswith('data:'):
+                    base64_data = entry_image.split(',')[1]
+                else:
+                    base64_data = entry_image
+                image_bytes = base64.b64decode(base64_data)
+                pil_img = PILImage.open(io.BytesIO(image_bytes))
+                if pil_img.mode in ('RGBA', 'P'):
+                    pil_img = pil_img.convert('RGB')
+                img_buffer = io.BytesIO()
+                pil_img.save(img_buffer, format='JPEG', quality=85)
+                img_buffer.seek(0)
+                img_width, img_height = pil_img.size
+                max_width = 5 * inch
+                max_height = 4 * inch
+                scale = min(max_width / img_width, max_height / img_height)
+                img_flowable = RLImage(img_buffer, width=img_width * scale, height=img_height * scale)
+                story.append(img_flowable)
+                story.append(Spacer(1, 10))
+            except Exception as e:
+                story.append(Paragraph("[Screenshot could not be processed]", meta_style))
         
         # Entry content in a box
         content_text = entry_content.replace('\n', '<br/>')
