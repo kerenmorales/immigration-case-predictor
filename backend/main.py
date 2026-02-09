@@ -33,10 +33,16 @@ tokenizer = None
 model_type = None  # 'transformer' or 'sklearn'
 OUTCOME_LABELS = {0: "Dismissed", 1: "Allowed"}
 
-
 @app.on_event("startup")
 async def load_model():
-global model, tokenizer, model_type
+    global model, tokenizer, model_type
+    
+    # Skip model loading by default to save memory on Railway free tier
+    if os.environ.get("LOAD_MODEL", "").lower() not in ("1", "true", "yes"):
+        print("Skipping model loading (set LOAD_MODEL=true to enable)")
+        return
+    
+    # Try Hugging Face Hub first, then local
     
     # Skip model loading by default to save memory on Railway free tier
     # Set LOAD_MODEL=true to enable model loading
