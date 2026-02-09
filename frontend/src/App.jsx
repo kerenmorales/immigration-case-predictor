@@ -1921,7 +1921,7 @@ function DocumentChecklist() {
 
 function ProofOfRelationship({ user }) {
 const [entries, setEntries] = useState([])
-const [newEntry, setNewEntry] = useState({ type: 'text_message', date: '', content: '', description: '', image: null })
+const [newEntry, setNewEntry] = useState({ type: 'text_message', date: '', content: '', description: '', image: null })  
 const [loading, setLoading] = useState(false)
 
   const entryTypes = [
@@ -1958,6 +1958,8 @@ const [loading, setLoading] = useState(false)
   const removeImage = () => {
     setNewEntry(prev => ({ ...prev, image: null }))
   }
+
+  // Estimate pages
   
   // Estimate pages (roughly 3000 characters per page)
   const totalChars = entries.reduce((acc, e) => acc + e.content.length + (e.description?.length || 0) + 100, 0)
