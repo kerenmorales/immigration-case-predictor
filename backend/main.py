@@ -41,8 +41,9 @@ global model, tokenizer, model_type
     # Skip model loading by default to save memory on Railway free tier
     # Set LOAD_MODEL=true to enable model loading
     if os.environ.get("LOAD_MODEL", "").lower() not in ("1", "true", "yes"):
-        print("Skipping model loading (set LOAD_MODEL=true to enable)")
-        return
+    print("Skipping model loading (set LOAD_MODEL=true to enable)")
+    return
+
     
     # Try Hugging Face Hub first, then local
 
