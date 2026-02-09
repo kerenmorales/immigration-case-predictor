@@ -2525,7 +2525,9 @@ def generate_photo_album_pdf(categories: list) -> bytes:
             image_data = photo.get('image', '')
             date = photo.get('date', '')
             location = photo.get('location', '')
+            people = photo.get('people', '')
             description = photo.get('description', '')
+
             
             # Try to add the image
             if image_data:
@@ -2578,6 +2580,9 @@ def generate_photo_album_pdf(categories: list) -> bytes:
                     meta_text.append(f"📍 {location}")
                 story.append(Paragraph(" | ".join(meta_text), meta_style))
             
+             # Add people in photo
+            if people:
+                story.append(Paragraph(f"👥 <b>People:</b> {people}", caption_style))
             # Add description
             if description:
                 story.append(Paragraph(description, caption_style))
