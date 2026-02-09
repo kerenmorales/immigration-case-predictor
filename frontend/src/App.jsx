@@ -2243,6 +2243,7 @@ function PhotoAlbumOrganizer({ user }) {
             image: photo.image,
             date: photo.date || '',
             location: photo.location || '',
+            people: photo.people || '',
             description: photo.description || ''
           } : null
         }).filter(Boolean)
@@ -2386,11 +2387,21 @@ function PhotoAlbumOrganizer({ user }) {
                         </div>
                       </div>
                       <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-1">Who is in this photo? (names & relation)</label>
+                        <input
+                          type="text"
+                          value={photo?.people || ''}
+                          onChange={(e) => updateDescription(category.id, slotIndex, 'people', e.target.value)}
+                          placeholder="e.g., John (sponsor), Maria (applicant), Sarah (sponsor's mother)"
+                          className="w-full border border-slate-300 rounded px-3 py-1.5 text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
                         <label className="block text-xs font-medium text-slate-600 mb-1">Description</label>
                         <textarea
                           value={photo?.description || ''}
                           onChange={(e) => updateDescription(category.id, slotIndex, 'description', e.target.value)}
-                          placeholder="Describe this photo: who is in it, what was the occasion, why is it meaningful..."
+                          placeholder="Describe the occasion and why it's meaningful..."
                           rows={2}
                           className="w-full border border-slate-300 rounded px-3 py-1.5 text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
                         />
