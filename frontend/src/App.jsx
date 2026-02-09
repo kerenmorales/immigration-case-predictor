@@ -1920,11 +1920,12 @@ function DocumentChecklist() {
 }
 
 function ProofOfRelationship({ user }) {
-  const [entries, setEntries] = useState([])
-  const [newEntry, setNewEntry] = useState({ type: 'text_message', date: '', content: '', description: '' })
-  const [loading, setLoading] = useState(false)
+const [entries, setEntries] = useState([])
+const [newEntry, setNewEntry] = useState({ type: 'text_message', date: '', content: '', description: '', image: null })
+const [loading, setLoading] = useState(false)
 
   const entryTypes = [
+
     { value: 'text_message', label: '💬 Text Message', icon: '💬' },
     { value: 'email', label: '📧 Email', icon: '📧' },
     { value: 'social_media', label: '📱 Social Media', icon: '📱' },
@@ -1940,10 +1941,24 @@ function ProofOfRelationship({ user }) {
     setNewEntry({ type: 'text_message', date: '', content: '', description: '' })
   }
 
-  const removeEntry = (id) => {
+    const removeEntry = (id) => {
     setEntries(prev => prev.filter(e => e.id !== id))
   }
 
+  const handleImageUpload = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      setNewEntry(prev => ({ ...prev, image: event.target.result }))
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const removeImage = () => {
+    setNewEntry(prev => ({ ...prev, image: null }))
+  }
+  
   // Estimate pages (roughly 3000 characters per page)
   const totalChars = entries.reduce((acc, e) => acc + e.content.length + (e.description?.length || 0) + 100, 0)
   const estimatedPages = Math.max(1, Math.ceil(totalChars / 3000))
@@ -2024,18 +2039,49 @@ function ProofOfRelationship({ user }) {
             />
           </div>
         </div>
-        
         <div className="mb-4">
           <label className="block text-sm font-medium text-slate-700 mb-1.5">
-            Content (copy/paste the message, email, or description)
+            Content (type text OR upload a screenshot)
           </label>
           <textarea
             value={newEntry.content}
             onChange={(e) => setNewEntry(prev => ({ ...prev, content: e.target.value }))}
-            rows={4}
+            rows={3}
             className="w-full border border-slate-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none"
-            placeholder="Paste the text message, email content, or describe the communication..."
+            placeholder="Type or paste text here..."
           />
+          
+          <div className="mt-3 p-4 border-2 border-dashed border-slate-300 rounded-lg bg-slate-50">
+            {newEntry.image ? (
+              <div className="relative inline-block">
+                <img src={newEntry.image} alt="Screenshot" className="max-h-48 rounded-lg border border-slate-200" />
+                <button
+                  onClick={removeImage}
+                  className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full text-sm hover:bg-red-600"
+                >
+                  ×
+                </button>
+              </div>
+            ) : (
+              <div className="text-center">
+                <span className="text-2xl">📷</span>
+                <p className="text-sm text-slate-500 mt-1">Upload a screenshot (PNG or JPEG)</p>
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg"
+                  onChange={handleImageUpload}
+                  className="hidden"
+                  id="screenshot-upload"
+                />
+                <label
+                  htmlFor="screenshot-upload"
+                  className="inline-block mt-2 px-4 py-2 bg-slate-200 hover:bg-slate-300 rounded-lg text-sm cursor-pointer"
+                >
+                  Choose File
+                </label>
+              </div>
+            )}
+          </div>
         </div>
         
         <div className="mb-4">
@@ -2053,7 +2099,7 @@ function ProofOfRelationship({ user }) {
         
         <button
           onClick={addEntry}
-          disabled={!newEntry.date || !newEntry.content}
+          disabled={!newEntry.date || (!newEntry.content && !newEntry.image)}
           className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium disabled:bg-slate-300 disabled:cursor-not-allowed"
         >
           + Add Entry
@@ -2097,9 +2143,15 @@ function ProofOfRelationship({ user }) {
                   {entry.description && (
                     <p className="text-sm text-slate-600 italic mb-2">{entry.description}</p>
                   )}
-                  <p className="text-sm text-slate-700 whitespace-pre-wrap bg-slate-50 p-3 rounded-lg">
-                    {entry.content.length > 300 ? entry.content.substring(0, 300) + '...' : entry.content}
-                  </p>
+                  {entry.image && (
+                    <img src={entry.image} alt="Screenshot" className="max-h-48 rounded-lg border border-slate-200 mb-2" />
+                  )}
+                  {entry.content && (
+                    <p className="text-sm text-slate-700 whitespace-pre-wrap bg-slate-50 p-3 rounded-lg">
+                      {entry.content.length > 300 ? entry.content.substring(0, 300) + '...' : entry.content}
+                    </p>
+                  )}
+
                 </div>
               )
             })}
