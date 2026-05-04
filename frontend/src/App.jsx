@@ -1537,7 +1537,7 @@ function AuthPage({ onAdminAccess }) {
           <p className="mt-6 text-center text-xs text-slate-400">
             By signing up, you agree to our Terms of Service and Privacy Policy
           </p>
-        </div> className="mt-4 text-center">
+        </p></p><div className="mt-4 text-center"><button onClick={onAdminAccess} className="text-xs text-slate-400 hover:text-red-600 transition-colors">🔑 Admin Access</button></div></div><button onClick={onAdminAccess} className="text-xs text-slate-400 hover:text-red-600 transition-colors">🔑 Admin Access</button></div>
             <button onClick={onAdminAccess} className="text-xs text-slate-400 hover:text-red-600 transition-colors">🔑 Admin Access</button>
           </div>
       </div>
