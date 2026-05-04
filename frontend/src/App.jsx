@@ -1396,7 +1396,7 @@ function VisaForms({ user }) {
   )
 }
 
-function AuthPage() {
+function AuthPage({ onAdminAccess }) {
   const [isLogin, setIsLogin] = useState(true)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
