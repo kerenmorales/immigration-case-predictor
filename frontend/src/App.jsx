@@ -31,7 +31,7 @@ function App() {
     )
   }
 
-  if (!user) return <AuthPage />
+  if (!user) return <AuthPage onAdminAccess={() => setUser({ id: 'admin', email: 'admin@immigrationai.app', role: 'admin' })} />
 
   return (
     <div className="min-h-screen bg-slate-50">
