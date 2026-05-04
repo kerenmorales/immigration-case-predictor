@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from './supabase'
+import ClientIntake from './ClientIntake'
 
 const API_URL = import.meta.env.VITE_API_URL || 
   (window.location.hostname.includes('railway.app') 
@@ -64,6 +65,7 @@ function App() {
               { id: 'visaforms', label: 'Visa Forms' },
               { id: 'sponsorship', label: 'Sponsorship Forms' },
               { id: 'predictor', label: 'Case Predictor' },
+              { id: 'intake', label: 'Client Intake' },
               { id: 'history', label: 'My Cases' }
             ].map(tab => (
               <button
@@ -88,6 +90,7 @@ function App() {
         {activeTab === 'visaforms' && <VisaForms user={user} />}
         {activeTab === 'predictor' && <CasePredictor user={user} />}
         {activeTab === 'sponsorship' && <SponsorshipAssistant formData={sponsorshipData} setFormData={setSponsorshipData} user={user} />}
+        {activeTab === 'intake' && <ClientIntake user={user} />}
         {activeTab === 'history' && <UserHistory user={user} />}
       </main>
 
