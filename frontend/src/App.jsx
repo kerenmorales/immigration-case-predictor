@@ -1529,12 +1529,8 @@ function AuthPage({ onAdminAccess }) {
             <p className="mt-6 text-center text-sm text-slate-500">
               {isLogin ? "Don't have an account? " : "Already have an account? "}
               <button onClick={() => setIsLogin(!isLogin)} className="text-red-600 font-medium hover:underline">
-                {isLogin ? 'Sign up' : 'Sign in'}
-              </button>
-            </p>
-          </div>
-
-          <p className="mt-6 text-center text-xs text-slate-400">
+                {isLogin ? 'Sign up' : 'Sign in'}</button></p>{isLogin && (<button onClick={async () => {const email = prompt('Enter your email address:');if (email) {const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });if (error) alert('Error: ' + error.message);else alert('Password reset link sent! Check your email.');}}} className="mt-3 block w-full text-center text-sm text-slate-500 hover:text-red-600">Forgot your password?</button>)}</div><p
+ className="mt-6 text-center text-xs text-slate-400">
             By signing up, you agree to our Terms of Service and Privacy Policy
         </p><div className="mt-4 text-center"><button onClick={onAdminAccess} className="text-xs text-slate-400 hover:text-red-600 transition-colors">🔑 Admin Access</button></div></div></div></div>)}
     function CasePredictor({ user }) {
