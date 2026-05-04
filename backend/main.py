@@ -2664,3 +2664,120 @@ async def generate_photo_album_pdf_endpoint(data: PhotoAlbumInput):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
+        # ============== Client Intake PDF Generation ==============
+
+@app.post("/generate-intake-pdf")
+async def generate_intake_pdf(data: dict):
+    """Generate a client intake summary PDF."""
+    if not PDF_SUPPORT:
+        raise HTTPException(status_code=500, detail="PDF support not available.")
+    
+    try:
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
+        styles = getSampleStyleSheet()
+        
+        title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=18, spaceAfter=20, textColor=colors.HexColor('#1F2937'), alignment=1)
+        section_style = ParagraphStyle('Section', parent=styles['Heading2'], fontSize=13, spaceBefore=15, spaceAfter=8, textColor=colors.HexColor('#DC2626'))
+        content_style = ParagraphStyle('Content', parent=styles['Normal'], fontSize=10, leading=14)
+        
+        story = []
+        story.append(Paragraph("Client Intake Form / Formulario de Admision", title_style))
+        story.append(Paragraph(f"Date: {datetime.now().strftime('%B %d, %Y')}", styles['Normal']))
+        story.append(Spacer(1, 20))
+        
+        def add_section(title, fields):
+            story.append(Paragraph(title, section_style))
+            rows = []
+            for label, key in fields:
+                value = data.get(key, '') or '—'
+                rows.append([label + ":", str(value)])
+            if rows:
+                table = Table(rows, colWidths=[2.5*inch, 4*inch])
+                table.setStyle(TableStyle([
+                    ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 10),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                    ('TOPPADDING', (0, 0), (-1, -1), 6),
+                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ]))
+                story.append(table)
+            story.append(Spacer(1, 10))
+        
+        add_section("Personal Information", [
+            ("Full Name", "full_name"),
+            ("Date of Birth", "dob"),
+            ("Country of Birth", "country_birth"),
+            ("Citizenship", "citizenship"),
+            ("Address", "address"),
+            ("Phone", "phone"),
+            ("Email", "email"),
+            ("Marital Status", "marital_status"),
+            ("Dependents", "dependents"),
+        ])
+        
+        add_section("Immigration Status", [
+            ("Current Status", "current_status"),
+            ("Permit Number", "permit_number"),
+            ("Date Issued", "date_issued"),
+            ("Expiry Date", "expiry_date"),
+            ("Time in Canada", "time_in_canada"),
+            ("Ever Refused", "ever_refused"),
+            ("Refusal Details", "refusal_details"),
+        ])
+        
+        services = data.get('services_needed', [])
+        if services:
+            story.append(Paragraph("Services Needed", section_style))
+            for s in services:
+                story.append(Paragraph(f"• {s.replace('_', ' ').title()}", content_style))
+            story.append(Spacer(1, 10))
+        
+        add_section("Education & Work", [
+            ("Education Level", "education_level"),
+            ("Field of Study", "field_of_study"),
+            ("Education Country", "edu_country"),
+            ("ECA Assessed", "eca_assessed"),
+            ("Occupation", "occupation"),
+            ("NOC Code", "noc_code"),
+            ("Years Exp (Canada)", "years_exp_canada"),
+            ("Years Exp (Total)", "years_exp_total"),
+            ("Job Offer", "has_job_offer"),
+            ("LMIA Status", "lmia_status"),
+        ])
+        
+        add_section("Language & Other", [
+            ("English Level", "english_level"),
+            ("French Level", "french_level"),
+            ("IELTS Score", "ielts_score"),
+            ("TEF Score", "tef_score"),
+            ("Family in Canada", "family_in_canada"),
+            ("Family Details", "family_details"),
+            ("Criminal History", "criminal_history"),
+            ("Medical Issues", "medical_issues"),
+            ("Previous Applications", "previous_apps"),
+            ("Budget", "budget"),
+            ("Notes", "notes"),
+        ])
+        
+        story.append(Spacer(1, 30))
+        footer_style = ParagraphStyle('Footer', parent=styles['Normal'], fontSize=8, textColor=colors.gray, alignment=1)
+        story.append(Paragraph("This document is confidential and for immigration consultation purposes only.", footer_style))
+        
+        doc.build(story)
+        
+        name = data.get('full_name', 'client').replace(' ', '_')
+        return Response(
+            content=buffer.getvalue(),
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename=intake_{name}.pdf",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Expose-Headers": "Content-Disposition"
+            }
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
+
