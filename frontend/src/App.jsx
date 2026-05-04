@@ -49,7 +49,7 @@ function App() {
           </div>
           <div className="flex items-center gap-6">
             <span className="text-sm text-slate-600">{user.email}</span>
-            <button onClick={() => supabase.auth.signOut()} className="text-sm text-slate-500 hover:text-slate-700">
+            <button onClick={() => supabase.auth.signOut(); setUser(null); }} className="text-sm text-slate-500 hover:text-slate-700">
               Sign Out
             </button>
           </div>
@@ -1537,9 +1537,10 @@ function AuthPage({ onAdminAccess }) {
           <p className="mt-6 text-center text-xs text-slate-400">
             By signing up, you agree to our Terms of Service and Privacy Policy
           </p>
-        </div>
+        </div> className="mt-4 text-center">
+            <button onClick={onAdminAccess} className="text-xs text-slate-400 hover:text-red-600 transition-colors">🔑 Admin Access</button>
+          </div>
       </div>
-    </div>
   )
 }
 
