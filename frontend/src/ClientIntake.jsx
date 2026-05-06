@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from './supabase'
 
 const t = {
@@ -214,10 +214,50 @@ export default function ClientIntake({ user }) {
   const [services, setServices] = useState({})
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [saveStatus, setSaveStatus] = useState('')
   const l = t[lang]
 
-  const u = (field, value) => setData(prev => ({ ...prev, [field]: value }))
-  const toggleService = (key) => setServices(prev => ({ ...prev, [key]: !prev[key] }))
+  // Load saved draft on mount
+  useState(() => {
+    if (user?.id && user.id !== 'admin') {
+      supabase.from('client_intakes').select('*').eq('user_id', user.id).eq('status', 'draft').order('updated_at', { ascending: false }).limit(1).then(({ data: rows }) => {
+        if (rows && rows.length > 0) {
+          const saved = rows[0]
+          if (saved.intake_data) setData(saved.intake_data)
+          if (saved.services) setServices(saved.services)
+          setSaveStatus('Draft loaded')
+          setTimeout(() => setSaveStatus(''), 3000)
+        }
+      })
+    }
+  }, [])
+
+  // Auto-save when data changes
+  const autoSave = async () => {
+    if (!user?.id || user.id === 'admin') return
+    try {
+      const { data: existing } = await supabase.from('client_intakes').select('id').eq('user_id', user.id).eq('status', 'draft').limit(1)
+      const payload = { user_id: user.id, intake_data: data, services, status: 'draft', updated_at: new Date().toISOString() }
+      if (existing && existing.length > 0) {
+        await supabase.from('client_intakes').update(payload).eq('id', existing[0].id)
+      } else {
+        await supabase.from('client_intakes').insert(payload)
+      }
+      setSaveStatus('Auto-saved')
+      setTimeout(() => setSaveStatus(''), 2000)
+    } catch (e) { console.error('Auto-save error:', e) }
+  }
+
+  const u = (field, value) => {
+    setData(prev => ({ ...prev, [field]: value }))
+    clearTimeout(window._intakeSaveTimer)
+    window._intakeSaveTimer = setTimeout(autoSave, 2000)
+  }
+  const toggleService = (key) => {
+    setServices(prev => ({ ...prev, [key]: !prev[key] }))
+    clearTimeout(window._intakeSaveTimer)
+    window._intakeSaveTimer = setTimeout(autoSave, 2000)
+  }
 
   const steps = [l.step1, l.step2, l.step3, l.step4, l.step5, l.step6]
   const totalSteps = steps.length
@@ -299,6 +339,7 @@ export default function ClientIntake({ user }) {
       </div>
 
       {success && <div className="p-4 bg-green-50 border border-green-200 text-green-700 rounded-lg">{l.saved}</div>}
+      {saveStatus && <div className="text-xs text-slate-400 text-right">{saveStatus}</div>}
 
       {/* Form Steps */}
       <div className="bg-white rounded-xl border border-slate-200 p-6">
