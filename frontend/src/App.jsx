@@ -2831,10 +2831,12 @@ function FormPackageGenerator({ user, formData }) {
       name: 'Family Class — Spouse/Partner (No Children)',
       icon: '💑',
       forms: [
+        { id: 'imm5491', name: 'IMM 5491', title: 'Document Checklist — Sponsor', url: 'https://www.canada.ca/content/dam/ircc/migration/ircc/english/pdf/kits/forms/imm5491e.pdf' },
         { id: 'imm1344', name: 'IMM 1344', title: 'Application to Sponsor, Sponsorship Agreement and Undertaking', url: 'https://www.canada.ca/content/dam/ircc/migration/ircc/english/pdf/kits/forms/imm1344e.pdf' },
         { id: 'imm0008', name: 'IMM 0008', title: 'Generic Application Form for Canada', url: 'https://www.canada.ca/content/dam/ircc/migration/ircc/english/pdf/kits/forms/imm0008enu_2d.pdf' },
         { id: 'imm5532', name: 'IMM 5532', title: 'Relationship Information and Sponsorship Evaluation', url: 'https://www.canada.ca/content/dam/ircc/migration/ircc/english/pdf/kits/forms/imm5532e.pdf' },
         { id: 'imm5669', name: 'IMM 5669', title: 'Schedule A — Background/Declaration', url: 'https://www.canada.ca/content/dam/ircc/migration/ircc/english/pdf/kits/forms/imm5669e.pdf' },
+        { id: 'imm5476', name: 'IMM 5476', title: 'Use of a Representative', url: 'https://www.canada.ca/content/dam/ircc/migration/ircc/english/pdf/kits/forms/imm5476e.pdf', optional: true },
         { id: 'imm0008dep', name: 'IMM 0008 DEP', title: 'Additional Dependants/Declaration (if applicable)', url: 'https://www.canada.ca/content/dam/ircc/migration/ircc/english/pdf/kits/forms/imm0008dep.pdf', optional: true },
       ]
     },
@@ -2843,12 +2845,14 @@ function FormPackageGenerator({ user, formData }) {
       name: 'Family Class — Spouse/Partner with Dependent Children',
       icon: '👨‍👩‍👧‍👦',
       forms: [
+        { id: 'imm5491', name: 'IMM 5491', title: 'Document Checklist — Sponsor', url: 'https://www.canada.ca/content/dam/ircc/migration/ircc/english/pdf/kits/forms/imm5491e.pdf' },
         { id: 'imm1344', name: 'IMM 1344', title: 'Application to Sponsor, Sponsorship Agreement and Undertaking', url: 'https://www.canada.ca/content/dam/ircc/migration/ircc/english/pdf/kits/forms/imm1344e.pdf' },
         { id: 'imm0008', name: 'IMM 0008', title: 'Generic Application Form for Canada (Principal Applicant)', url: 'https://www.canada.ca/content/dam/ircc/migration/ircc/english/pdf/kits/forms/imm0008enu_2d.pdf' },
         { id: 'imm0008dep', name: 'IMM 0008 DEP', title: 'Additional Dependants/Declaration (one per child)', url: 'https://www.canada.ca/content/dam/ircc/migration/ircc/english/pdf/kits/forms/imm0008dep.pdf' },
         { id: 'imm5532', name: 'IMM 5532', title: 'Relationship Information and Sponsorship Evaluation', url: 'https://www.canada.ca/content/dam/ircc/migration/ircc/english/pdf/kits/forms/imm5532e.pdf' },
         { id: 'imm5669', name: 'IMM 5669', title: 'Schedule A — Background/Declaration', url: 'https://www.canada.ca/content/dam/ircc/migration/ircc/english/pdf/kits/forms/imm5669e.pdf' },
         { id: 'imm5406', name: 'IMM 5406', title: 'Additional Family Information (one per family member)', url: 'https://www.canada.ca/content/dam/ircc/migration/ircc/english/pdf/kits/forms/imm5406e.pdf' },
+        { id: 'imm5476', name: 'IMM 5476', title: 'Use of a Representative', url: 'https://www.canada.ca/content/dam/ircc/migration/ircc/english/pdf/kits/forms/imm5476e.pdf', optional: true },
       ]
     },
     {
@@ -2856,10 +2860,12 @@ function FormPackageGenerator({ user, formData }) {
       name: 'Family Class — Parents & Grandparents',
       icon: '👴👵',
       forms: [
+        { id: 'imm5491', name: 'IMM 5491', title: 'Document Checklist — Sponsor', url: 'https://www.canada.ca/content/dam/ircc/migration/ircc/english/pdf/kits/forms/imm5491e.pdf' },
         { id: 'imm1344', name: 'IMM 1344', title: 'Application to Sponsor, Sponsorship Agreement and Undertaking', url: 'https://www.canada.ca/content/dam/ircc/migration/ircc/english/pdf/kits/forms/imm1344e.pdf' },
         { id: 'imm0008', name: 'IMM 0008', title: 'Generic Application Form for Canada', url: 'https://www.canada.ca/content/dam/ircc/migration/ircc/english/pdf/kits/forms/imm0008enu_2d.pdf' },
         { id: 'imm5669', name: 'IMM 5669', title: 'Schedule A — Background/Declaration', url: 'https://www.canada.ca/content/dam/ircc/migration/ircc/english/pdf/kits/forms/imm5669e.pdf' },
         { id: 'imm5406', name: 'IMM 5406', title: 'Additional Family Information', url: 'https://www.canada.ca/content/dam/ircc/migration/ircc/english/pdf/kits/forms/imm5406e.pdf' },
+        { id: 'imm5476', name: 'IMM 5476', title: 'Use of a Representative', url: 'https://www.canada.ca/content/dam/ircc/migration/ircc/english/pdf/kits/forms/imm5476e.pdf', optional: true },
       ]
     }
   ]
