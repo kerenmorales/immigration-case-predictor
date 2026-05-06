@@ -1,12 +1,47 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from './supabase'
-import ClientIntake from './ClientIntake'
-
 
 const API_URL = import.meta.env.VITE_API_URL || 
   (window.location.hostname.includes('railway.app') 
     ? 'https://immigration-case-predictor-production.up.railway.app' 
     : 'http://localhost:8000')
+
+// Analytics tracking function - exported for use in components
+export const trackEvent = async (eventType, userId = null, userEmail = null, metadata = {}) => {
+  try {
+    // Get location from IP (free service)
+    let location = { country: null, city: null }
+    try {
+      const geo = await fetch('https://ipapi.co/json/')
+      if (geo.ok) {
+        const geoData = await geo.json()
+        location = { country: geoData.country_name, city: geoData.city }
+      }
+    } catch (e) {
+      // Silently fail - location is optional
+    }
+
+    await supabase.from('analytics').insert({
+      event_type: eventType,
+      user_id: userId,
+      user_email: userEmail,
+      metadata,
+      country: location.country,
+      city: location.city
+    })
+  } catch (e) {
+    // Silently fail - don't break the app for analytics
+    console.error('Analytics error:', e)
+  }
+}
+
+// Track anonymous page visit on first load
+let hasTrackedVisit = false
+const trackAnonymousVisit = async () => {
+  if (hasTrackedVisit) return
+  hasTrackedVisit = true
+  await trackEvent('site_visit', null, null, { referrer: document.referrer || 'direct' })
+}
 
 function App() {
   const [user, setUser] = useState(null)
@@ -14,13 +49,40 @@ function App() {
   const [activeTab, setActiveTab] = useState('home')
   const [sponsorshipData, setSponsorshipData] = useState({})
 
+  // Track anonymous visit on mount
+  useEffect(() => {
+    trackAnonymousVisit()
+  }, [])
+
+  // Track page views when tab changes
+  useEffect(() => {
+    if (user) {
+      trackEvent('page_view', user.id, user.email, { page: activeTab })
+    }
+  }, [activeTab, user])
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
       setLoading(false)
     })
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null)
+      
+      // Track auth events
+      if (event === 'SIGNED_IN') {
+        trackEvent('user_login', session?.user?.id, session?.user?.email, {
+          provider: session?.user?.app_metadata?.provider || 'email'
+        })
+      }
+      if (event === 'SIGNED_UP') {
+        trackEvent('user_registration', session?.user?.id, session?.user?.email, {
+          provider: session?.user?.app_metadata?.provider || 'email'
+        })
+      }
+      if (event === 'SIGNED_OUT') {
+        trackEvent('user_logout', null, null, {})
+      }
     })
     return () => subscription.unsubscribe()
   }, [])
@@ -66,7 +128,6 @@ function App() {
               { id: 'visaforms', label: 'Visa Forms' },
               { id: 'sponsorship', label: 'Sponsorship Forms' },
               { id: 'predictor', label: 'Case Predictor' },
-              { id: 'intake', label: 'Client Intake' },
               { id: 'history', label: 'My Cases' }
             ].map(tab => (
               <button
@@ -91,7 +152,6 @@ function App() {
         {activeTab === 'visaforms' && <VisaForms user={user} />}
         {activeTab === 'predictor' && <CasePredictor user={user} />}
         {activeTab === 'sponsorship' && <SponsorshipAssistant formData={sponsorshipData} setFormData={setSponsorshipData} user={user} />}
-        {activeTab === 'intake' && <ClientIntake user={user} />}
         {activeTab === 'history' && <UserHistory user={user} />}
       </main>
 
@@ -1533,11 +1593,32 @@ function AuthPage({ onAdminAccess }) {
             <p className="mt-6 text-center text-sm text-slate-500">
               {isLogin ? "Don't have an account? " : "Already have an account? "}
               <button onClick={() => setIsLogin(!isLogin)} className="text-red-600 font-medium hover:underline">
-                {isLogin ? 'Sign up' : 'Sign in'}</button></p>{isLogin && (<button onClick={async () => {const email = prompt('Enter your email address:');if (email) {const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });if (error) alert('Error: ' + error.message);else alert('Password reset link sent! Check your email.');}}} className="mt-3 block w-full text-center text-sm text-slate-500 hover:text-red-600">Forgot your password?</button>)}</div><p
- className="mt-6 text-center text-xs text-slate-400">
+                {isLogin ? 'Sign up' : 'Sign in'}
+              </button>
+            </p>
+          </div>
+
+          <p className="mt-6 text-center text-xs text-slate-400">
             By signing up, you agree to our Terms of Service and Privacy Policy
-        </p><div className="mt-4 text-center"><button onClick={onAdminAccess} className="text-xs text-slate-400 hover:text-red-600 transition-colors">🔑 Admin Access</button></div></div></div></div>)}
-    function CasePredictor({ user }) {
+          </p>
+
+          {/* Admin Quick Access */}
+          <div className="mt-4 text-center">
+            <button
+              onClick={onAdminAccess}
+              className="text-xs text-slate-400 hover:text-red-600 transition-colors"
+            >
+              🔑 Admin Access
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
+function CasePredictor({ user }) {
   const [caseText, setCaseText] = useState('')
   const [country, setCountry] = useState('')
   const [claimType, setClaimType] = useState('')
@@ -1561,6 +1642,15 @@ function AuthPage({ onAdminAccess }) {
       }
       const result = await response.json()
       setPrediction(result)
+      
+      // Track prediction in analytics
+      trackEvent('case_prediction', user.id, user.email, {
+        prediction: result.prediction,
+        confidence: result.confidence,
+        country: country || 'not_specified',
+        claim_type: claimType || 'not_specified'
+      })
+      
       await supabase.from('predictions').insert({
         user_id: user.id, case_text: caseText, country_of_origin: country || null,
         claim_type: claimType || null, prediction: result.prediction,
@@ -1913,13 +2003,36 @@ function DocumentChecklist() {
 }
 
 function ProofOfRelationship({ user }) {
-const [entries, setEntries] = useState([])
-const [newEntry, setNewEntry] = useState({ type: 'text_message', date: '', content: '', description: '', image: null })  
-const [loading, setLoading] = useState(false)
+  const [entries, setEntries] = useState([])
+  const [newEntry, setNewEntry] = useState({ type: 'text_message', date: '', content: '', description: '', image: null })
+  const [loading, setLoading] = useState(false)
 
-  useEffect(() => {if (!user?.id || user.id === 'admin') return;supabase.from('proof_entries').select('*').eq('user_id', user.id).order('updated_at', { ascending: false }).limit(1).then(({ data }) => {if (data && data.length > 0 && data[0].entries) setEntries(data[0].entries)})}, [user?.id])useEffect(() => {if (!user?.id || user.id === 'admin' || entries.length === 0) return;const timer = setTimeout(async () => {const { data: existing } = await supabase.from('proof_entries').select('id').eq('user_id', user.id).limit(1);const payload = { user_id: user.id, entries, updated_at: new Date().toISOString() };if (existing && existing.length > 0) {await supabase.from('proof_entries').update(payload).eq('id', existing[0].id)} else {await supabase.from('proof_entries').insert(payload)}}, 2000);return () => clearTimeout(timer)}, [entries, user?.id])
+  // Auto-save: Load entries from Supabase on mount
+  useEffect(() => {
+    if (!user?.id || user.id === 'admin') return
+    supabase.from('proof_entries').select('*').eq('user_id', user.id).order('updated_at', { ascending: false }).limit(1).then(({ data }) => {
+      if (data && data.length > 0 && data[0].entries) {
+        setEntries(data[0].entries)
+      }
+    })
+  }, [user?.id])
+
+  // Auto-save: Save entries to Supabase when they change
+  useEffect(() => {
+    if (!user?.id || user.id === 'admin' || entries.length === 0) return
+    const timer = setTimeout(async () => {
+      const { data: existing } = await supabase.from('proof_entries').select('id').eq('user_id', user.id).limit(1)
+      const payload = { user_id: user.id, entries, updated_at: new Date().toISOString() }
+      if (existing && existing.length > 0) {
+        await supabase.from('proof_entries').update(payload).eq('id', existing[0].id)
+      } else {
+        await supabase.from('proof_entries').insert(payload)
+      }
+    }, 2000)
+    return () => clearTimeout(timer)
+  }, [entries, user?.id])
+
   const entryTypes = [
-
     { value: 'text_message', label: '💬 Text Message', icon: '💬' },
     { value: 'email', label: '📧 Email', icon: '📧' },
     { value: 'social_media', label: '📱 Social Media', icon: '📱' },
@@ -1931,12 +2044,11 @@ const [loading, setLoading] = useState(false)
 
   const addEntry = () => {
     if (!newEntry.date || (!newEntry.content && !newEntry.image)) return
-
     setEntries(prev => [...prev, { ...newEntry, id: Date.now() }].sort((a, b) => new Date(a.date) - new Date(b.date)))
-    setNewEntry({ type: 'text_message', date: '', content: '', description: '' })
+    setNewEntry({ type: 'text_message', date: '', content: '', description: '', image: null })
   }
 
-    const removeEntry = (id) => {
+  const removeEntry = (id) => {
     setEntries(prev => prev.filter(e => e.id !== id))
   }
 
@@ -1950,12 +2062,26 @@ const [loading, setLoading] = useState(false)
     reader.readAsDataURL(file)
   }
 
+  const handleImagePaste = (e) => {
+    const items = e.clipboardData?.items
+    if (!items) return
+    for (let item of items) {
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile()
+        const reader = new FileReader()
+        reader.onload = (event) => {
+          setNewEntry(prev => ({ ...prev, image: event.target.result }))
+        }
+        reader.readAsDataURL(file)
+        break
+      }
+    }
+  }
+
   const removeImage = () => {
     setNewEntry(prev => ({ ...prev, image: null }))
   }
 
-  // Estimate pages
-  
   // Estimate pages (roughly 3000 characters per page)
   const totalChars = entries.reduce((acc, e) => acc + e.content.length + (e.description?.length || 0) + 100, 0)
   const estimatedPages = Math.max(1, Math.ceil(totalChars / 3000))
@@ -1977,6 +2103,12 @@ const [loading, setLoading] = useState(false)
       a.download = 'proof_of_relationship.pdf'
       a.click()
       window.URL.revokeObjectURL(url)
+      
+      // Track PDF download
+      trackEvent('pdf_download', user?.id, user?.email, {
+        type: 'proof_of_relationship',
+        entries_count: entries.length
+      })
     } catch (err) {
       console.error(err)
       alert('Failed to generate PDF. Please try again.')
@@ -2036,6 +2168,7 @@ const [loading, setLoading] = useState(false)
             />
           </div>
         </div>
+        
         <div className="mb-4">
           <label className="block text-sm font-medium text-slate-700 mb-1.5">
             Content (type text OR upload a screenshot)
@@ -2043,11 +2176,13 @@ const [loading, setLoading] = useState(false)
           <textarea
             value={newEntry.content}
             onChange={(e) => setNewEntry(prev => ({ ...prev, content: e.target.value }))}
-            rows={3}
+            onPaste={handleImagePaste}
+            rows={4}
             className="w-full border border-slate-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none"
-            placeholder="Type or paste text here..."
+            placeholder="Paste text here, or paste/upload a screenshot below..."
           />
-
+          
+          {/* Screenshot Upload */}
           <div className="mt-3 p-4 border-2 border-dashed border-slate-300 rounded-lg bg-slate-50">
             {newEntry.image ? (
               <div className="relative inline-block">
@@ -2062,10 +2197,10 @@ const [loading, setLoading] = useState(false)
             ) : (
               <div className="text-center">
                 <span className="text-2xl">📷</span>
-                <p className="text-sm text-slate-500 mt-1">Upload a screenshot (PNG or JPEG)</p>
+                <p className="text-sm text-slate-500 mt-1">Paste a screenshot (Ctrl+V) or upload an image</p>
                 <input
                   type="file"
-                  accept="image/png,image/jpeg"
+                  accept="image/*"
                   onChange={handleImageUpload}
                   className="hidden"
                   id="screenshot-upload"
@@ -2074,7 +2209,7 @@ const [loading, setLoading] = useState(false)
                   htmlFor="screenshot-upload"
                   className="inline-block mt-2 px-4 py-2 bg-slate-200 hover:bg-slate-300 rounded-lg text-sm cursor-pointer"
                 >
-                  Choose File
+                  Browse Files
                 </label>
               </div>
             )}
@@ -2137,7 +2272,6 @@ const [loading, setLoading] = useState(false)
                       Remove
                     </button>
                   </div>
-
                   {entry.description && (
                     <p className="text-sm text-slate-600 italic mb-2">{entry.description}</p>
                   )}
@@ -2149,7 +2283,6 @@ const [loading, setLoading] = useState(false)
                       {entry.content.length > 300 ? entry.content.substring(0, 300) + '...' : entry.content}
                     </p>
                   )}
-
                 </div>
               )
             })}
@@ -2200,6 +2333,31 @@ const [loading, setLoading] = useState(false)
 function PhotoAlbumOrganizer({ user }) {
   const [photos, setPhotos] = useState({})
   const [loading, setLoading] = useState(false)
+
+  // Auto-save: Load photos from Supabase on mount
+  useEffect(() => {
+    if (!user?.id || user.id === 'admin') return
+    supabase.from('photo_album_data').select('*').eq('user_id', user.id).order('updated_at', { ascending: false }).limit(1).then(({ data }) => {
+      if (data && data.length > 0 && data[0].photos) {
+        setPhotos(data[0].photos)
+      }
+    })
+  }, [user?.id])
+
+  // Auto-save: Save photos to Supabase when they change
+  useEffect(() => {
+    if (!user?.id || user.id === 'admin' || Object.keys(photos).length === 0) return
+    const timer = setTimeout(async () => {
+      const { data: existing } = await supabase.from('photo_album_data').select('id').eq('user_id', user.id).limit(1)
+      const payload = { user_id: user.id, photos, updated_at: new Date().toISOString() }
+      if (existing && existing.length > 0) {
+        await supabase.from('photo_album_data').update(payload).eq('id', existing[0].id)
+      } else {
+        await supabase.from('photo_album_data').insert(payload)
+      }
+    }, 2000)
+    return () => clearTimeout(timer)
+  }, [photos, user?.id])
 
   const categories = [
     { id: 'first_meeting', title: '💕 How We First Met', description: 'Photos from when you first met or early dating', slots: 3 },
@@ -2313,6 +2471,13 @@ function PhotoAlbumOrganizer({ user }) {
       a.download = 'relationship_photo_album.pdf'
       a.click()
       window.URL.revokeObjectURL(url)
+      
+      // Track PDF download
+      const totalPhotos = photoData.reduce((acc, cat) => acc + cat.photos.length, 0)
+      trackEvent('pdf_download', user?.id, user?.email, {
+        type: 'photo_album',
+        photos_count: totalPhotos
+      })
     } catch (err) {
       console.error(err)
       alert('Failed to generate PDF. Please try again.')
@@ -2654,19 +2819,266 @@ function CopyForIRCCSponsorship({ formData }) {
   )
 }
 
+function FormPackageGenerator({ user, formData }) {
+  const [selectedPackage, setSelectedPackage] = useState(null)
+  const [formTracker, setFormTracker] = useState({})
+  const [loading, setLoading] = useState(true)
+
+  // Application packages with their required IRCC forms
+  const packages = [
+    {
+      id: 'family_spouse',
+      name: 'Family Class — Spouse/Partner (No Children)',
+      icon: '💑',
+      forms: [
+        { id: 'imm1344', name: 'IMM 1344', title: 'Application to Sponsor, Sponsorship Agreement and Undertaking', url: 'https://www.canada.ca/content/dam/ircc/migration/ircc/english/pdf/kits/forms/imm1344e.pdf' },
+        { id: 'imm0008', name: 'IMM 0008', title: 'Generic Application Form for Canada', url: 'https://www.canada.ca/content/dam/ircc/migration/ircc/english/pdf/kits/forms/imm0008enu_2d.pdf' },
+        { id: 'imm5532', name: 'IMM 5532', title: 'Relationship Information and Sponsorship Evaluation', url: 'https://www.canada.ca/content/dam/ircc/migration/ircc/english/pdf/kits/forms/imm5532e.pdf' },
+        { id: 'imm5669', name: 'IMM 5669', title: 'Schedule A — Background/Declaration', url: 'https://www.canada.ca/content/dam/ircc/migration/ircc/english/pdf/kits/forms/imm5669e.pdf' },
+        { id: 'imm0008dep', name: 'IMM 0008 DEP', title: 'Additional Dependants/Declaration (if applicable)', url: 'https://www.canada.ca/content/dam/ircc/migration/ircc/english/pdf/kits/forms/imm0008dep.pdf', optional: true },
+      ]
+    },
+    {
+      id: 'family_children',
+      name: 'Family Class — Spouse/Partner with Dependent Children',
+      icon: '👨‍👩‍👧‍👦',
+      forms: [
+        { id: 'imm1344', name: 'IMM 1344', title: 'Application to Sponsor, Sponsorship Agreement and Undertaking', url: 'https://www.canada.ca/content/dam/ircc/migration/ircc/english/pdf/kits/forms/imm1344e.pdf' },
+        { id: 'imm0008', name: 'IMM 0008', title: 'Generic Application Form for Canada (Principal Applicant)', url: 'https://www.canada.ca/content/dam/ircc/migration/ircc/english/pdf/kits/forms/imm0008enu_2d.pdf' },
+        { id: 'imm0008dep', name: 'IMM 0008 DEP', title: 'Additional Dependants/Declaration (one per child)', url: 'https://www.canada.ca/content/dam/ircc/migration/ircc/english/pdf/kits/forms/imm0008dep.pdf' },
+        { id: 'imm5532', name: 'IMM 5532', title: 'Relationship Information and Sponsorship Evaluation', url: 'https://www.canada.ca/content/dam/ircc/migration/ircc/english/pdf/kits/forms/imm5532e.pdf' },
+        { id: 'imm5669', name: 'IMM 5669', title: 'Schedule A — Background/Declaration', url: 'https://www.canada.ca/content/dam/ircc/migration/ircc/english/pdf/kits/forms/imm5669e.pdf' },
+        { id: 'imm5406', name: 'IMM 5406', title: 'Additional Family Information (one per family member)', url: 'https://www.canada.ca/content/dam/ircc/migration/ircc/english/pdf/kits/forms/imm5406e.pdf' },
+      ]
+    },
+    {
+      id: 'family_parents',
+      name: 'Family Class — Parents & Grandparents',
+      icon: '👴👵',
+      forms: [
+        { id: 'imm1344', name: 'IMM 1344', title: 'Application to Sponsor, Sponsorship Agreement and Undertaking', url: 'https://www.canada.ca/content/dam/ircc/migration/ircc/english/pdf/kits/forms/imm1344e.pdf' },
+        { id: 'imm0008', name: 'IMM 0008', title: 'Generic Application Form for Canada', url: 'https://www.canada.ca/content/dam/ircc/migration/ircc/english/pdf/kits/forms/imm0008enu_2d.pdf' },
+        { id: 'imm5669', name: 'IMM 5669', title: 'Schedule A — Background/Declaration', url: 'https://www.canada.ca/content/dam/ircc/migration/ircc/english/pdf/kits/forms/imm5669e.pdf' },
+        { id: 'imm5406', name: 'IMM 5406', title: 'Additional Family Information', url: 'https://www.canada.ca/content/dam/ircc/migration/ircc/english/pdf/kits/forms/imm5406e.pdf' },
+      ]
+    }
+  ]
+
+  // Load saved tracker from Supabase
+  useEffect(() => {
+    if (!user?.id || user.id === 'admin') { setLoading(false); return }
+    supabase.from('form_tracker').select('*').eq('user_id', user.id).order('updated_at', { ascending: false }).limit(1).then(({ data: rows }) => {
+      if (rows && rows.length > 0 && rows[0].tracker_data) {
+        setFormTracker(rows[0].tracker_data)
+        if (rows[0].tracker_data.selectedPackage) setSelectedPackage(rows[0].tracker_data.selectedPackage)
+      }
+      setLoading(false)
+    })
+  }, [user?.id])
+
+  // Auto-save tracker to Supabase
+  const saveTracker = async (newTracker, pkgId) => {
+    if (!user?.id || user.id === 'admin') return
+    const payload = { user_id: user.id, tracker_data: { ...newTracker, selectedPackage: pkgId || selectedPackage }, updated_at: new Date().toISOString() }
+    const { data: existing } = await supabase.from('form_tracker').select('id').eq('user_id', user.id).limit(1)
+    if (existing && existing.length > 0) {
+      await supabase.from('form_tracker').update(payload).eq('id', existing[0].id)
+    } else {
+      await supabase.from('form_tracker').insert(payload)
+    }
+  }
+
+  const updateFormStatus = (formId, status) => {
+    const updated = { ...formTracker, [formId]: { ...(formTracker[formId] || {}), status, updatedAt: new Date().toISOString() } }
+    setFormTracker(updated)
+    saveTracker(updated)
+  }
+
+  const updateFormNotes = (formId, notes) => {
+    const updated = { ...formTracker, [formId]: { ...(formTracker[formId] || {}), notes } }
+    setFormTracker(updated)
+    saveTracker(updated)
+  }
+
+  const selectPackage = (pkgId) => {
+    setSelectedPackage(pkgId)
+    saveTracker(formTracker, pkgId)
+  }
+
+  if (loading) return <div className="text-center py-12 text-slate-400">Loading...</div>
+
+  // Package selection screen
+  if (!selectedPackage) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 rounded-xl p-6">
+          <h2 className="text-xl font-semibold text-slate-800 mb-2">📦 IRCC Form Package</h2>
+          <p className="text-slate-600">Select your application type to see all required forms with download links.</p>
+        </div>
+        <div className="grid grid-cols-1 gap-4">
+          {packages.map(pkg => (
+            <button key={pkg.id} onClick={() => selectPackage(pkg.id)} className="bg-white rounded-xl border border-slate-200 p-6 text-left hover:border-red-300 hover:shadow-md transition-all group">
+              <div className="flex items-center gap-4">
+                <span className="text-3xl">{pkg.icon}</span>
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-800 group-hover:text-red-600">{pkg.name}</h3>
+                  <p className="text-sm text-slate-500">{pkg.forms.length} forms required</p>
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  // Form tracker view
+  const currentPackage = packages.find(p => p.id === selectedPackage)
+  const completedCount = currentPackage.forms.filter(f => formTracker[f.id]?.status === 'done').length
+  const totalForms = currentPackage.forms.length
+  const progress = Math.round((completedCount / totalForms) * 100)
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 rounded-xl p-6">
+        <div className="flex justify-between items-start">
+          <div>
+            <h2 className="text-xl font-semibold text-slate-800 mb-1">📦 {currentPackage.name}</h2>
+            <p className="text-slate-600 text-sm">Download each form, fill it in, and mark as complete when done.</p>
+          </div>
+          <button onClick={() => setSelectedPackage(null)} className="text-sm text-slate-500 hover:text-slate-700 underline">Change package</button>
+        </div>
+        <div className="mt-4 bg-white rounded-lg p-3">
+          <div className="flex justify-between items-center mb-1">
+            <span className="text-sm font-medium text-slate-700">Progress</span>
+            <span className={`text-sm font-medium ${completedCount === totalForms ? 'text-green-600' : 'text-slate-500'}`}>{completedCount}/{totalForms} forms complete</span>
+          </div>
+          <div className="w-full bg-slate-200 rounded-full h-2.5">
+            <div className={`h-2.5 rounded-full transition-all ${completedCount === totalForms ? 'bg-green-500' : 'bg-red-500'}`} style={{ width: `${progress}%` }} />
+          </div>
+        </div>
+      </div>
+
+      {/* Reference Data from Wizard */}
+      {formData && Object.keys(formData).length > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
+          <h3 className="font-semibold text-blue-800 mb-3">📋 Your Data (from Form Wizard) — Copy into forms</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-1 text-sm">
+            {Object.entries(formData).filter(([_, v]) => v).map(([key, value]) => (
+              <div key={key} className="flex justify-between py-1 border-b border-blue-100">
+                <span className="text-blue-600 capitalize">{key.replace(/_/g, ' ')}</span>
+                <span className="font-medium text-blue-900">{value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Forms List */}
+      <div className="space-y-3">
+        {currentPackage.forms.map(form => {
+          const tracker = formTracker[form.id] || {}
+          const status = tracker.status || 'not_started'
+          return (
+            <div key={form.id} className={`bg-white rounded-xl border p-5 ${status === 'done' ? 'border-green-200 bg-green-50/30' : status === 'in_progress' ? 'border-amber-200' : 'border-slate-200'}`}>
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={`text-lg font-bold ${status === 'done' ? 'text-green-600' : 'text-red-600'}`}>{form.name}</span>
+                    {form.optional && <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded">Optional</span>}
+                    {status === 'done' && <span className="text-green-500">✓</span>}
+                  </div>
+                  <p className="text-sm text-slate-600 mb-3">{form.title}</p>
+                  <div className="flex flex-wrap gap-2">
+                    <a href={form.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-medium rounded-lg transition-colors">
+                      📥 Download PDF
+                    </a>
+                    <select
+                      value={status}
+                      onChange={(e) => updateFormStatus(form.id, e.target.value)}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-lg border ${
+                        status === 'done' ? 'bg-green-100 border-green-300 text-green-800' :
+                        status === 'in_progress' ? 'bg-amber-100 border-amber-300 text-amber-800' :
+                        'bg-slate-100 border-slate-300 text-slate-600'
+                      }`}
+                    >
+                      <option value="not_started">Not Started</option>
+                      <option value="in_progress">In Progress</option>
+                      <option value="done">Complete ✓</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              {/* Notes */}
+              <div className="mt-3">
+                <input
+                  type="text"
+                  value={tracker.notes || ''}
+                  onChange={(e) => updateFormNotes(form.id, e.target.value)}
+                  placeholder="Add notes (e.g., 'Need passport copy for page 3')"
+                  className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Ready to submit */}
+      {completedCount === totalForms && (
+        <div className="bg-green-50 border border-green-200 rounded-xl p-6 text-center">
+          <span className="text-3xl mb-2 block">🎉</span>
+          <h3 className="font-semibold text-green-800 mb-2">All Forms Complete!</h3>
+          <p className="text-sm text-green-700">You're ready to submit your application to IRCC. Upload your forms at the <a href="https://www.canada.ca/en/immigration-refugees-citizenship/services/application/account.html" target="_blank" rel="noopener noreferrer" className="underline font-medium">IRCC online portal</a>.</p>
+        </div>
+      )}
+
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-6">
+        <h3 className="font-semibold text-amber-800 mb-2">💡 Tips</h3>
+        <ul className="text-sm text-amber-700 space-y-1">
+          <li>• Download each PDF and fill it using Adobe Acrobat Reader (free)</li>
+          <li>• Use the reference data above to copy your info into the forms</li>
+          <li>• Mark each form as "Complete" when finished — your progress saves automatically</li>
+          <li>• For IMM 0008 DEP — download one copy per dependent child</li>
+          <li>• Keep all completed forms in one folder on your computer until ready to submit</li>
+        </ul>
+      </div>
+    </div>
+  )
+}
+
 function SponsorshipAssistant({ formData, setFormData, user }) {
   const [step, setStep] = useState(1)
   const [activeView, setActiveView] = useState('wizard')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(null)
+  const [localFormData, setLocalFormData] = useState(formData || {})
   const [chatMessages, setChatMessages] = useState([
     { role: 'assistant', content: 'Hello! I\'ll help you fill out your sponsorship forms. Just tell me the information naturally and I\'ll format it correctly for IRCC.\n\nFor example, say:\n"The sponsor is John Michael Smith, born March 15, 1985 in Toronto, Canada"\n\nI\'ll extract and format: Family Name: SMITH, Given Name(s): John Michael, DOB: 1985-03-15' }
   ])
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
 
-  const updateField = (field, value) => setFormData(prev => ({ ...prev, [field]: value }))
+  // Sync local state to parent on blur or after a delay
+  const syncTimerRef = useRef(null)
+  const syncToParent = () => {
+    if (syncTimerRef.current) clearTimeout(syncTimerRef.current)
+    syncTimerRef.current = setTimeout(() => {
+      setFormData(localFormData)
+    }, 1000)
+  }
+
+  const updateField = (field, value) => {
+    setLocalFormData(prev => {
+      const updated = { ...prev, [field]: value }
+      // Sync to parent after delay (won't cause focus loss since localFormData is local)
+      if (syncTimerRef.current) clearTimeout(syncTimerRef.current)
+      syncTimerRef.current = setTimeout(() => setFormData(updated), 1000)
+      return updated
+    })
+  }
 
   const handleChatSubmit = async (e) => {
     e.preventDefault()
@@ -2681,13 +3093,14 @@ function SponsorshipAssistant({ formData, setFormData, user }) {
       const response = await fetch(`${API_URL}/chat-form-fill`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMessage, current_data: formData })
+        body: JSON.stringify({ message: userMessage, current_data: localFormData })
       })
       if (!response.ok) throw new Error('Failed to get response')
       const data = await response.json()
       
       // Update form fields if extracted
       if (data.extracted_fields && Object.keys(data.extracted_fields).length > 0) {
+        setLocalFormData(prev => ({ ...prev, ...data.extracted_fields }))
         setFormData(prev => ({ ...prev, ...data.extracted_fields }))
       }
       
@@ -2701,13 +3114,13 @@ function SponsorshipAssistant({ formData, setFormData, user }) {
 
   const canProceed = () => {
     if (step === 1) {
-      return formData.sponsor_family_name && formData.sponsor_given_name && formData.sponsor_dob && formData.sponsor_country_birth
+      return localFormData.sponsor_family_name && localFormData.sponsor_given_name && localFormData.sponsor_dob && localFormData.sponsor_country_birth
     }
     if (step === 2) {
-      return formData.applicant_family_name && formData.applicant_given_name && formData.applicant_dob && formData.applicant_country_birth && formData.applicant_citizenship
+      return localFormData.applicant_family_name && localFormData.applicant_given_name && localFormData.applicant_dob && localFormData.applicant_country_birth && localFormData.applicant_citizenship
     }
     if (step === 3) {
-      return formData.relationship_type && formData.date_married
+      return localFormData.relationship_type && localFormData.date_married
     }
     return true
   }
@@ -2715,8 +3128,9 @@ function SponsorshipAssistant({ formData, setFormData, user }) {
   const handleSave = async () => {
     setLoading(true)
     setError(null)
+    setFormData(localFormData)
     try {
-      await supabase.from('sponsorship_forms').insert({ user_id: user.id, form_data: formData, status: 'draft' })
+      await supabase.from('sponsorship_forms').insert({ user_id: user.id, form_data: localFormData, status: 'draft' })
       setSuccess('Form saved successfully!')
       setTimeout(() => setSuccess(null), 3000)
     } catch (err) {
@@ -2729,11 +3143,12 @@ function SponsorshipAssistant({ formData, setFormData, user }) {
   const handleDownloadPDF = async () => {
     setLoading(true)
     setError(null)
+    setFormData(localFormData)
     try {
       const response = await fetch(`${API_URL}/generate-pdf-summary`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(localFormData)
       })
       if (!response.ok) throw new Error('Failed to generate PDF')
       const blob = await response.blob()
@@ -2750,14 +3165,14 @@ function SponsorshipAssistant({ formData, setFormData, user }) {
     }
   }
 
-  const FormField = ({ label, field, type = 'text', required = false, placeholder = '', options = null }) => (
-    <div className="mb-4">
+  const renderFormField = (label, field, type = 'text', required = false, placeholder = '', options = null) => (
+    <div className="mb-4" key={field}>
       <label className="block text-sm font-medium text-slate-700 mb-1.5">
         {label} {required && <span className="text-red-500">*</span>}
       </label>
       {options ? (
         <select
-          value={formData[field] || ''}
+          value={localFormData[field] || ''}
           onChange={(e) => updateField(field, e.target.value)}
           className="w-full border border-slate-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-red-500 focus:border-transparent"
         >
@@ -2767,7 +3182,7 @@ function SponsorshipAssistant({ formData, setFormData, user }) {
       ) : (
         <input
           type={type}
-          value={formData[field] || ''}
+          value={localFormData[field] || ''}
           onChange={(e) => updateField(field, e.target.value)}
           className="w-full border border-slate-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-red-500 focus:border-transparent"
           placeholder={placeholder}
@@ -2822,6 +3237,12 @@ function SponsorshipAssistant({ formData, setFormData, user }) {
         >
           Form Reports
         </button>
+        <button
+          onClick={() => setActiveView('formpackage')}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeView === 'formpackage' ? 'bg-red-600 text-white' : 'bg-white border border-slate-300 text-slate-600 hover:bg-slate-50'}`}
+        >
+          📦 Form Package
+        </button>
       </div>
 
       {activeView === 'checklist' ? (
@@ -2832,6 +3253,8 @@ function SponsorshipAssistant({ formData, setFormData, user }) {
         <PhotoAlbumOrganizer user={user} />
       ) : activeView === 'copy' ? (
         <CopyForIRCCSponsorship formData={formData} />
+      ) : activeView === 'formpackage' ? (
+        <FormPackageGenerator user={user} formData={formData} />
       ) : activeView === 'chat' ? (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2">
@@ -2943,42 +3366,42 @@ function SponsorshipAssistant({ formData, setFormData, user }) {
               <div className="p-6">
                 {step === 1 && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
-                    <FormField label="Family Name (Surname)" field="sponsor_family_name" required placeholder="As shown on passport" />
-                    <FormField label="Given Name(s)" field="sponsor_given_name" required placeholder="First and middle names" />
-                    <FormField label="Date of Birth" field="sponsor_dob" type="date" required />
-                    <FormField label="Country of Birth" field="sponsor_country_birth" required />
-                    <FormField label="Country of Citizenship" field="sponsor_citizenship" />
-                    <FormField label="Current Mailing Address" field="sponsor_address" placeholder="Street, City, Province, Postal Code" />
-                    <FormField label="Email Address" field="sponsor_email" type="email" />
-                    <FormField label="Phone Number" field="sponsor_phone" placeholder="+1 (XXX) XXX-XXXX" />
+                    {renderFormField("Family Name (Surname)", "sponsor_family_name", "text", true, "As shown on passport")}
+                    {renderFormField("Given Name(s)", "sponsor_given_name", "text", true, "First and middle names")}
+                    {renderFormField("Date of Birth", "sponsor_dob", "date", true)}
+                    {renderFormField("Country of Birth", "sponsor_country_birth", "text", true)}
+                    {renderFormField("Country of Citizenship", "sponsor_citizenship")}
+                    {renderFormField("Current Mailing Address", "sponsor_address", "text", false, "Street, City, Province, Postal Code")}
+                    {renderFormField("Email Address", "sponsor_email", "email")}
+                    {renderFormField("Phone Number", "sponsor_phone", "text", false, "+1 (XXX) XXX-XXXX")}
                   </div>
                 )}
                 {step === 2 && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
-                    <FormField label="Family Name (Surname)" field="applicant_family_name" required placeholder="As shown on passport" />
-                    <FormField label="Given Name(s)" field="applicant_given_name" required placeholder="First and middle names" />
-                    <FormField label="Date of Birth" field="applicant_dob" type="date" required />
-                    <FormField label="Country of Birth" field="applicant_country_birth" required />
-                    <FormField label="Country of Citizenship" field="applicant_citizenship" required />
-                    <FormField label="Current Country of Residence" field="applicant_residence" />
-                    <FormField label="Current Mailing Address" field="applicant_address" placeholder="Full address in country of residence" />
-                    <FormField label="Passport Number" field="applicant_passport" />
+                    {renderFormField("Family Name (Surname)", "applicant_family_name", "text", true, "As shown on passport")}
+                    {renderFormField("Given Name(s)", "applicant_given_name", "text", true, "First and middle names")}
+                    {renderFormField("Date of Birth", "applicant_dob", "date", true)}
+                    {renderFormField("Country of Birth", "applicant_country_birth", "text", true)}
+                    {renderFormField("Country of Citizenship", "applicant_citizenship", "text", true)}
+                    {renderFormField("Current Country of Residence", "applicant_residence")}
+                    {renderFormField("Current Mailing Address", "applicant_address", "text", false, "Full address in country of residence")}
+                    {renderFormField("Passport Number", "applicant_passport")}
                   </div>
                 )}
                 {step === 3 && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
-                    <FormField label="Relationship Type" field="relationship_type" required options={[
+                    {renderFormField("Relationship Type", "relationship_type", "text", true, "", [
                       { value: 'spouse', label: 'Spouse' },
                       { value: 'common_law', label: 'Common-law Partner' },
                       { value: 'conjugal', label: 'Conjugal Partner' }
-                    ]} />
-                    <FormField label="Date of Marriage/Union" field="date_married" type="date" required />
-                    <FormField label="Place of Marriage" field="place_married" placeholder="City, Country" />
-                    <FormField label="How did you meet?" field="how_met" />
+                    ])}
+                    {renderFormField("Date of Marriage/Union", "date_married", "date", true)}
+                    {renderFormField("Place of Marriage", "place_married", "text", false, "City, Country")}
+                    {renderFormField("How did you meet?", "how_met")}
                     <div className="md:col-span-2">
                       <label className="block text-sm font-medium text-slate-700 mb-1.5">Relationship History</label>
                       <textarea
-                        value={formData.relationship_history || ''}
+                        value={localFormData.relationship_history || ''}
                         onChange={(e) => updateField('relationship_history', e.target.value)}
                         rows={4}
                         className="w-full border border-slate-300 rounded-lg p-4 focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none"
