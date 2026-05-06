@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from './supabase'
 
 const t = {
@@ -11,11 +11,29 @@ const t = {
     step3: 'Services Needed',
     step4: 'Education & Work',
     step5: 'Language & Other',
-    step6: 'Review & Submit',
+    step6: 'Dependents / Children',
+    step7: 'Review & Submit',
     next: 'Next',
     prev: 'Previous',
     submit: 'Submit & Download PDF',
     saving: 'Saving...',
+    dependentsTitle: 'Dependents / Children',
+    dependentsSubtitle: 'Add all dependent children who will be included in the application',
+    addChild: 'Add Child',
+    removeChild: 'Remove',
+    childName: 'Full Name',
+    childDob: 'Date of Birth',
+    childGender: 'Gender',
+    childRelationship: 'Relationship to You',
+    childCitizenship: 'Country of Citizenship',
+    childPassportNum: 'Passport Number',
+    childPassportExpiry: 'Passport Expiry Date',
+    childCountryBirth: 'Country of Birth',
+    childMaritalStatus: 'Marital Status (if 18+)',
+    childAccompanying: 'Accompanying you to Canada?',
+    male: 'Male', female: 'Female', other: 'Other',
+    genderOptions: { male: 'Male', female: 'Female', other: 'Other' },
+    relationshipOptions: { son: 'Son', daughter: 'Daughter', stepson: 'Stepson', stepdaughter: 'Stepdaughter', adopted_son: 'Adopted Son', adopted_daughter: 'Adopted Daughter' },
     fullName: 'Full Legal Name',
     dob: 'Date of Birth',
     countryBirth: 'Country of Birth',
@@ -110,11 +128,29 @@ const t = {
     step3: 'Servicios Necesarios',
     step4: 'Educacion y Trabajo',
     step5: 'Idioma y Otros',
-    step6: 'Revisar y Enviar',
+    step6: 'Dependientes / Hijos',
+    step7: 'Revisar y Enviar',
     next: 'Siguiente',
     prev: 'Anterior',
     submit: 'Enviar y Descargar PDF',
     saving: 'Guardando...',
+    dependentsTitle: 'Dependientes / Hijos',
+    dependentsSubtitle: 'Agregue todos los hijos dependientes que seran incluidos en la solicitud',
+    addChild: 'Agregar Hijo/a',
+    removeChild: 'Eliminar',
+    childName: 'Nombre Completo',
+    childDob: 'Fecha de Nacimiento',
+    childGender: 'Genero',
+    childRelationship: 'Relacion con Usted',
+    childCitizenship: 'Pais de Ciudadania',
+    childPassportNum: 'Numero de Pasaporte',
+    childPassportExpiry: 'Fecha de Vencimiento del Pasaporte',
+    childCountryBirth: 'Pais de Nacimiento',
+    childMaritalStatus: 'Estado Civil (si es mayor de 18)',
+    childAccompanying: 'Lo/la acompana a Canada?',
+    male: 'Masculino', female: 'Femenino', other: 'Otro',
+    genderOptions: { male: 'Masculino', female: 'Femenino', other: 'Otro' },
+    relationshipOptions: { son: 'Hijo', daughter: 'Hija', stepson: 'Hijastro', stepdaughter: 'Hijastra', adopted_son: 'Hijo Adoptivo', adopted_daughter: 'Hija Adoptiva' },
     fullName: 'Nombre Legal Completo',
     dob: 'Fecha de Nacimiento',
     countryBirth: 'Pais de Nacimiento',
@@ -212,19 +248,21 @@ export default function ClientIntake({ user }) {
   const [step, setStep] = useState(1)
   const [data, setData] = useState({})
   const [services, setServices] = useState({})
+  const [children, setChildren] = useState([])
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
   const [saveStatus, setSaveStatus] = useState('')
   const l = t[lang]
 
   // Load saved draft on mount
-  useState(() => {
+  useEffect(() => {
     if (user?.id && user.id !== 'admin') {
       supabase.from('client_intakes').select('*').eq('user_id', user.id).eq('status', 'draft').order('updated_at', { ascending: false }).limit(1).then(({ data: rows }) => {
         if (rows && rows.length > 0) {
           const saved = rows[0]
           if (saved.intake_data) setData(saved.intake_data)
           if (saved.services) setServices(saved.services)
+          if (saved.intake_data?.children) setChildren(saved.intake_data.children)
           setSaveStatus('Draft loaded')
           setTimeout(() => setSaveStatus(''), 3000)
         }
@@ -233,11 +271,15 @@ export default function ClientIntake({ user }) {
   }, [])
 
   // Auto-save when data changes
+  const saveTimerRef = useRef(null)
+  const isSavingRef = useRef(false)
+
   const autoSave = async () => {
-    if (!user?.id || user.id === 'admin') return
+    if (!user?.id || user.id === 'admin' || isSavingRef.current) return
+    isSavingRef.current = true
     try {
       const { data: existing } = await supabase.from('client_intakes').select('id').eq('user_id', user.id).eq('status', 'draft').limit(1)
-      const payload = { user_id: user.id, intake_data: data, services, status: 'draft', updated_at: new Date().toISOString() }
+      const payload = { user_id: user.id, intake_data: { ...data, children }, services, status: 'draft', updated_at: new Date().toISOString() }
       if (existing && existing.length > 0) {
         await supabase.from('client_intakes').update(payload).eq('id', existing[0].id)
       } else {
@@ -246,24 +288,42 @@ export default function ClientIntake({ user }) {
       setSaveStatus('Auto-saved')
       setTimeout(() => setSaveStatus(''), 2000)
     } catch (e) { console.error('Auto-save error:', e) }
+    isSavingRef.current = false
+  }
+
+  const triggerSave = () => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(autoSave, 3000)
   }
 
   const u = (field, value) => {
     setData(prev => ({ ...prev, [field]: value }))
-    clearTimeout(window._intakeSaveTimer)
-    window._intakeSaveTimer = setTimeout(autoSave, 2000)
+    triggerSave()
   }
   const toggleService = (key) => {
     setServices(prev => ({ ...prev, [key]: !prev[key] }))
-    clearTimeout(window._intakeSaveTimer)
-    window._intakeSaveTimer = setTimeout(autoSave, 2000)
+    triggerSave()
   }
 
-  const steps = [l.step1, l.step2, l.step3, l.step4, l.step5, l.step6]
+  // Children/Dependents helpers
+  const addChild = () => {
+    setChildren(prev => [...prev, { name: '', dob: '', gender: '', relationship: '', citizenship: '', passport_number: '', passport_expiry: '', country_birth: '', marital_status: '', accompanying: 'yes' }])
+    triggerSave()
+  }
+  const updateChild = (index, field, value) => {
+    setChildren(prev => prev.map((child, i) => i === index ? { ...child, [field]: value } : child))
+    triggerSave()
+  }
+  const removeChild = (index) => {
+    setChildren(prev => prev.filter((_, i) => i !== index))
+    triggerSave()
+  }
+
+  const steps = [l.step1, l.step2, l.step3, l.step4, l.step5, l.step6, l.step7]
   const totalSteps = steps.length
 
-  const Field = ({ label, field, type = 'text', required = false, placeholder = '', options = null }) => (
-    <div className="mb-4">
+  const renderField = (label, field, type = 'text', required = false, placeholder = '', options = null) => (
+    <div className="mb-4" key={field}>
       <label className="block text-sm font-medium text-slate-700 mb-1.5">{label} {required && <span className="text-red-500">*</span>}</label>
       {options ? (
         <select value={data[field] || ''} onChange={(e) => u(field, e.target.value)} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-red-500 focus:border-transparent">
@@ -281,7 +341,7 @@ export default function ClientIntake({ user }) {
   const handleSubmit = async () => {
     setLoading(true)
     try {
-      const intakeData = { ...data, services_needed: Object.keys(services).filter(k => services[k]), language: lang }
+      const intakeData = { ...data, children, services_needed: Object.keys(services).filter(k => services[k]), language: lang }
       // Save to Supabase
       if (user?.id !== 'admin') {
         await supabase.from('client_intakes').insert({ user_id: user.id, intake_data: intakeData, status: 'new' })
@@ -345,40 +405,40 @@ export default function ClientIntake({ user }) {
       <div className="bg-white rounded-xl border border-slate-200 p-6">
         {step === 1 && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
-            <Field label={l.fullName} field="full_name" required placeholder="John Michael Smith" />
-            <Field label={l.dob} field="dob" type="date" required />
-            <Field label={l.countryBirth} field="country_birth" required />
-            <Field label={l.citizenship} field="citizenship" required />
-            <div className="md:col-span-2"><Field label={l.currentAddress} field="address" placeholder="123 Main St, Toronto, ON" /></div>
-            <Field label={l.phone} field="phone" placeholder="+1 (416) 555-1234" />
-            <Field label={l.email} field="email" type="email" placeholder="client@email.com" />
-            <Field label={l.maritalStatus} field="marital_status" options={[
+            {renderField(l.fullName, 'full_name', 'text', true, 'John Michael Smith')}
+            {renderField(l.dob, 'dob', 'date', true)}
+            {renderField(l.countryBirth, 'country_birth', 'text', true)}
+            {renderField(l.citizenship, 'citizenship', 'text', true)}
+            <div className="md:col-span-2">{renderField(l.currentAddress, 'address', 'text', false, '123 Main St, Toronto, ON')}</div>
+            {renderField(l.phone, 'phone', 'text', false, '+1 (416) 555-1234')}
+            {renderField(l.email, 'email', 'email', false, 'client@email.com')}
+            {renderField(l.maritalStatus, 'marital_status', 'text', false, '', [
               { value: 'single', label: l.single },
               { value: 'married', label: l.married },
               { value: 'common_law', label: l.commonLaw },
               { value: 'divorced', label: l.divorced },
               { value: 'separated', label: l.separated },
               { value: 'widowed', label: l.widowed }
-            ]} />
-            <Field label={l.numDependents} field="dependents" type="number" placeholder="0" />
+            ])}
+            {renderField(l.numDependents, 'dependents', 'number', false, '0')}
           </div>
         )}
 
         {step === 2 && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
             <div className="md:col-span-2">
-              <Field label={l.currentStatus} field="current_status" required options={Object.entries(l.statusOptions).map(([value, label]) => ({ value, label }))} />
+              {renderField(l.currentStatus, 'current_status', 'text', true, '', Object.entries(l.statusOptions).map(([value, label]) => ({ value, label })))}
             </div>
-            <Field label={l.permitNumber} field="permit_number" placeholder="T123456789" />
-            <Field label={l.dateIssued} field="date_issued" type="date" />
-            <Field label={l.expiryDate} field="expiry_date" type="date" />
-            <Field label={l.howLongInCanada} field="time_in_canada" placeholder="e.g., 2 years, 6 months" />
+            {renderField(l.permitNumber, 'permit_number', 'text', false, 'T123456789')}
+            {renderField(l.dateIssued, 'date_issued', 'date')}
+            {renderField(l.expiryDate, 'expiry_date', 'date')}
+            {renderField(l.howLongInCanada, 'time_in_canada', 'text', false, 'e.g., 2 years, 6 months')}
             <div className="md:col-span-2">
-              <Field label={l.everRefused} field="ever_refused" options={[{ value: 'yes', label: l.yes }, { value: 'no', label: l.no }]} />
+              {renderField(l.everRefused, 'ever_refused', 'text', false, '', [{ value: 'yes', label: l.yes }, { value: 'no', label: l.no }])}
             </div>
             {data.ever_refused === 'yes' && (
               <div className="md:col-span-2">
-                <Field label={l.refusalDetails} field="refusal_details" type="textarea" placeholder="Country, date, reason..." />
+                {renderField(l.refusalDetails, 'refusal_details', 'textarea', false, 'Country, date, reason...')}
               </div>
             )}
           </div>
@@ -394,50 +454,135 @@ export default function ClientIntake({ user }) {
                 </button>
               ))}
             </div>
-            {services.other && <Field label={l.otherDetails} field="other_service_details" type="textarea" />}
+            {services.other && renderField(l.otherDetails, 'other_service_details', 'textarea')}
           </div>
         )}
 
         {step === 4 && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
-            <Field label={l.education} field="education_level" options={Object.entries(l.eduOptions).map(([value, label]) => ({ value, label }))} />
-            <Field label={l.fieldOfStudy} field="field_of_study" placeholder="e.g., Computer Science, Nursing" />
-            <Field label={l.eduCountry} field="edu_country" />
-            <Field label={l.wcaAssessed} field="eca_assessed" options={[{ value: 'yes', label: l.yes }, { value: 'no', label: l.no }]} />
-            <Field label={l.currentOccupation} field="occupation" placeholder="e.g., Software Developer, Nurse" />
-            <Field label={l.nocCode} field="noc_code" placeholder="e.g., 21232" />
-            <Field label={l.yearsExpCanada} field="years_exp_canada" type="number" placeholder="0" />
-            <Field label={l.yearsExpTotal} field="years_exp_total" type="number" placeholder="0" />
-            <Field label={l.hasJobOffer} field="has_job_offer" options={[{ value: 'yes', label: l.yes }, { value: 'no', label: l.no }]} />
-            <Field label={l.lmiaStatus} field="lmia_status" options={Object.entries(l.lmiaOptions).map(([value, label]) => ({ value, label }))} />
+            {renderField(l.education, 'education_level', 'text', false, '', Object.entries(l.eduOptions).map(([value, label]) => ({ value, label })))}
+            {renderField(l.fieldOfStudy, 'field_of_study', 'text', false, 'e.g., Computer Science, Nursing')}
+            {renderField(l.eduCountry, 'edu_country')}
+            {renderField(l.wcaAssessed, 'eca_assessed', 'text', false, '', [{ value: 'yes', label: l.yes }, { value: 'no', label: l.no }])}
+            {renderField(l.currentOccupation, 'occupation', 'text', false, 'e.g., Software Developer, Nurse')}
+            {renderField(l.nocCode, 'noc_code', 'text', false, 'e.g., 21232')}
+            {renderField(l.yearsExpCanada, 'years_exp_canada', 'number', false, '0')}
+            {renderField(l.yearsExpTotal, 'years_exp_total', 'number', false, '0')}
+            {renderField(l.hasJobOffer, 'has_job_offer', 'text', false, '', [{ value: 'yes', label: l.yes }, { value: 'no', label: l.no }])}
+            {renderField(l.lmiaStatus, 'lmia_status', 'text', false, '', Object.entries(l.lmiaOptions).map(([value, label]) => ({ value, label })))}
           </div>
         )}
 
         {step === 5 && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
-            <Field label={l.englishLevel} field="english_level" options={Object.entries(l.langLevels).map(([value, label]) => ({ value, label }))} />
-            <Field label={l.frenchLevel} field="french_level" options={Object.entries(l.langLevels).map(([value, label]) => ({ value, label }))} />
-            <Field label={l.ieltsScore} field="ielts_score" placeholder="e.g., L8.5 R7.5 W7.0 S7.5" />
-            <Field label={l.tefScore} field="tef_score" placeholder="e.g., 400/450" />
-            <Field label={l.familyInCanada} field="family_in_canada" options={[{ value: 'yes', label: l.yes }, { value: 'no', label: l.no }]} />
+            {renderField(l.englishLevel, 'english_level', 'text', false, '', Object.entries(l.langLevels).map(([value, label]) => ({ value, label })))}
+            {renderField(l.frenchLevel, 'french_level', 'text', false, '', Object.entries(l.langLevels).map(([value, label]) => ({ value, label })))}
+            {renderField(l.ieltsScore, 'ielts_score', 'text', false, 'e.g., L8.5 R7.5 W7.0 S7.5')}
+            {renderField(l.tefScore, 'tef_score', 'text', false, 'e.g., 400/450')}
+            {renderField(l.familyInCanada, 'family_in_canada', 'text', false, '', [{ value: 'yes', label: l.yes }, { value: 'no', label: l.no }])}
             {data.family_in_canada === 'yes' && (
-              <div className="md:col-span-2"><Field label={l.familyDetails} field="family_details" type="textarea" /></div>
+              <div className="md:col-span-2">{renderField(l.familyDetails, 'family_details', 'textarea')}</div>
             )}
-            <Field label={l.criminalHistory} field="criminal_history" options={[{ value: 'yes', label: l.yes }, { value: 'no', label: l.no }]} />
+            {renderField(l.criminalHistory, 'criminal_history', 'text', false, '', [{ value: 'yes', label: l.yes }, { value: 'no', label: l.no }])}
             {data.criminal_history === 'yes' && (
-              <div className="md:col-span-2"><Field label={l.criminalDetails} field="criminal_details" type="textarea" /></div>
+              <div className="md:col-span-2">{renderField(l.criminalDetails, 'criminal_details', 'textarea')}</div>
             )}
-            <Field label={l.medicalIssues} field="medical_issues" options={[{ value: 'yes', label: l.yes }, { value: 'no', label: l.no }]} />
-            <Field label={l.previousApps} field="previous_apps" options={[{ value: 'yes', label: l.yes }, { value: 'no', label: l.no }]} />
+            {renderField(l.medicalIssues, 'medical_issues', 'text', false, '', [{ value: 'yes', label: l.yes }, { value: 'no', label: l.no }])}
+            {renderField(l.previousApps, 'previous_apps', 'text', false, '', [{ value: 'yes', label: l.yes }, { value: 'no', label: l.no }])}
             {data.previous_apps === 'yes' && (
-              <div className="md:col-span-2"><Field label={l.previousAppsDetails} field="previous_apps_details" type="textarea" /></div>
+              <div className="md:col-span-2">{renderField(l.previousAppsDetails, 'previous_apps_details', 'textarea')}</div>
             )}
-            <Field label={l.budget} field="budget" placeholder="e.g., $3,000 - $5,000" />
-            <div className="md:col-span-2"><Field label={l.additionalNotes} field="notes" type="textarea" placeholder="Any other information..." /></div>
+            {renderField(l.budget, 'budget', 'text', false, 'e.g., $3,000 - $5,000')}
+            <div className="md:col-span-2">{renderField(l.additionalNotes, 'notes', 'textarea', false, 'Any other information...')}</div>
           </div>
         )}
 
         {step === 6 && (
+          <div>
+            <div className="mb-6">
+              <h3 className="text-lg font-semibold text-slate-800 mb-1">{l.dependentsTitle}</h3>
+              <p className="text-sm text-slate-500">{l.dependentsSubtitle}</p>
+            </div>
+
+            {children.length === 0 && (
+              <div className="text-center py-8 bg-slate-50 rounded-lg border-2 border-dashed border-slate-200 mb-4">
+                <span className="text-4xl mb-3 block">👶</span>
+                <p className="text-slate-500 mb-4">No dependents added yet</p>
+              </div>
+            )}
+
+            {children.map((child, index) => (
+              <div key={index} className="mb-6 p-5 bg-slate-50 rounded-xl border border-slate-200 relative">
+                <div className="flex justify-between items-center mb-4">
+                  <h4 className="font-medium text-slate-700">Child {index + 1}</h4>
+                  <button onClick={() => removeChild(index)} className="text-red-500 hover:text-red-700 text-sm font-medium">{l.removeChild} ✕</button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">{l.childName} <span className="text-red-500">*</span></label>
+                    <input type="text" value={child.name} onChange={(e) => updateChild(index, 'name', e.target.value)} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-red-500 focus:border-transparent" placeholder="Full legal name" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">{l.childDob} <span className="text-red-500">*</span></label>
+                    <input type="date" value={child.dob} onChange={(e) => updateChild(index, 'dob', e.target.value)} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-red-500 focus:border-transparent" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">{l.childGender}</label>
+                    <select value={child.gender} onChange={(e) => updateChild(index, 'gender', e.target.value)} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-red-500 focus:border-transparent">
+                      <option value="">Select...</option>
+                      {Object.entries(l.genderOptions).map(([val, label]) => <option key={val} value={val}>{label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">{l.childRelationship} <span className="text-red-500">*</span></label>
+                    <select value={child.relationship} onChange={(e) => updateChild(index, 'relationship', e.target.value)} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-red-500 focus:border-transparent">
+                      <option value="">Select...</option>
+                      {Object.entries(l.relationshipOptions).map(([val, label]) => <option key={val} value={val}>{label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">{l.childCountryBirth}</label>
+                    <input type="text" value={child.country_birth} onChange={(e) => updateChild(index, 'country_birth', e.target.value)} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-red-500 focus:border-transparent" placeholder="Country" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">{l.childCitizenship}</label>
+                    <input type="text" value={child.citizenship} onChange={(e) => updateChild(index, 'citizenship', e.target.value)} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-red-500 focus:border-transparent" placeholder="Country of citizenship" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">{l.childPassportNum}</label>
+                    <input type="text" value={child.passport_number} onChange={(e) => updateChild(index, 'passport_number', e.target.value)} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-red-500 focus:border-transparent" placeholder="Passport number" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">{l.childPassportExpiry}</label>
+                    <input type="date" value={child.passport_expiry} onChange={(e) => updateChild(index, 'passport_expiry', e.target.value)} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-red-500 focus:border-transparent" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">{l.childMaritalStatus}</label>
+                    <select value={child.marital_status} onChange={(e) => updateChild(index, 'marital_status', e.target.value)} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-red-500 focus:border-transparent">
+                      <option value="">Select...</option>
+                      <option value="single">{l.single}</option>
+                      <option value="married">{l.married}</option>
+                      <option value="common_law">{l.commonLaw}</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">{l.childAccompanying}</label>
+                    <select value={child.accompanying} onChange={(e) => updateChild(index, 'accompanying', e.target.value)} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-red-500 focus:border-transparent">
+                      <option value="yes">{l.yes}</option>
+                      <option value="no">{l.no}</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            <button onClick={addChild} className="w-full py-3 border-2 border-dashed border-slate-300 rounded-xl text-slate-600 hover:border-red-400 hover:text-red-600 font-medium transition-colors">
+              + {l.addChild}
+            </button>
+          </div>
+        )}
+
+        {step === 7 && (
           <div>
             <h3 className="text-lg font-semibold text-slate-800 mb-4">{l.reviewTitle}</h3>
             <p className="text-slate-500 mb-6">{l.reviewSubtitle}</p>
@@ -454,6 +599,23 @@ export default function ClientIntake({ user }) {
                   <div className="mt-1 flex flex-wrap gap-2">
                     {Object.keys(services).filter(k => services[k]).map(k => (
                       <span key={k} className="px-2 py-1 bg-red-100 text-red-700 rounded text-xs">{l.serviceOptions[k]}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {children.length > 0 && (
+                <div className="py-4 border-b border-slate-100">
+                  <span className="text-slate-500 font-medium">{l.dependentsTitle} ({children.length})</span>
+                  <div className="mt-2 space-y-2">
+                    {children.map((child, i) => (
+                      <div key={i} className="bg-slate-50 rounded-lg p-3">
+                        <span className="font-medium text-slate-800">{child.name || `Child ${i + 1}`}</span>
+                        <span className="text-slate-400 ml-2">
+                          {child.dob && `DOB: ${child.dob}`}
+                          {child.relationship && ` • ${l.relationshipOptions[child.relationship] || child.relationship}`}
+                          {child.citizenship && ` • ${child.citizenship}`}
+                        </span>
+                      </div>
                     ))}
                   </div>
                 </div>
