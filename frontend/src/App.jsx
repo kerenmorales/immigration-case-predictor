@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from './supabase'
 import ClientIntake from './ClientIntake'
 
+
 const API_URL = import.meta.env.VITE_API_URL || 
   (window.location.hostname.includes('railway.app') 
     ? 'https://immigration-case-predictor-production.up.railway.app' 
