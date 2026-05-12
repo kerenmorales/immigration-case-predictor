@@ -2375,13 +2375,26 @@ function ProofOfRelationship({ user }) {
 function PhotoAlbumOrganizer({ user }) {
   const [photos, setPhotos] = useState({})
   const [loading, setLoading] = useState(false)
+  const [savedDocs, setSavedDocs] = useState([])
+  const [currentDocName, setCurrentDocName] = useState('')
+  const [showSaveDialog, setShowSaveDialog] = useState(false)
+  const [saveName, setSaveName] = useState('')
 
-  // Auto-save: Load photos from Supabase on mount
+  // Load saved documents list
+  useEffect(() => {
+    if (!user?.id) return
+    supabase.from('photo_album_data').select('id, doc_name, updated_at').eq('user_id', user.id).order('updated_at', { ascending: false }).then(({ data }) => {
+      if (data) setSavedDocs(data)
+    })
+  }, [user?.id])
+
+  // Auto-save: Load most recent on mount
   useEffect(() => {
     if (!user?.id) return
     supabase.from('photo_album_data').select('*').eq('user_id', user.id).order('updated_at', { ascending: false }).limit(1).then(({ data }) => {
       if (data && data.length > 0 && data[0].photos) {
         setPhotos(data[0].photos)
+        setCurrentDocName(data[0].doc_name || 'Untitled')
       }
     })
   }, [user?.id])
@@ -2390,8 +2403,8 @@ function PhotoAlbumOrganizer({ user }) {
   useEffect(() => {
     if (!user?.id || Object.keys(photos).length === 0) return
     const timer = setTimeout(async () => {
-      const { data: existing } = await supabase.from('photo_album_data').select('id').eq('user_id', user.id).limit(1)
-      const payload = { user_id: user.id, photos, updated_at: new Date().toISOString() }
+      const { data: existing } = await supabase.from('photo_album_data').select('id').eq('user_id', user.id).order('updated_at', { ascending: false }).limit(1)
+      const payload = { user_id: user.id, photos, doc_name: currentDocName || 'Untitled', updated_at: new Date().toISOString() }
       if (existing && existing.length > 0) {
         await supabase.from('photo_album_data').update(payload).eq('id', existing[0].id)
       } else {
@@ -2400,6 +2413,37 @@ function PhotoAlbumOrganizer({ user }) {
     }, 2000)
     return () => clearTimeout(timer)
   }, [photos, user?.id])
+
+  // Save As — create a new named document
+  const saveAs = async () => {
+    if (!saveName.trim() || !user?.id) return
+    const payload = { user_id: user.id, photos, doc_name: saveName.trim(), updated_at: new Date().toISOString() }
+    await supabase.from('photo_album_data').insert(payload)
+    setCurrentDocName(saveName.trim())
+    setShowSaveDialog(false)
+    setSaveName('')
+    // Refresh list
+    const { data } = await supabase.from('photo_album_data').select('id, doc_name, updated_at').eq('user_id', user.id).order('updated_at', { ascending: false })
+    if (data) setSavedDocs(data)
+    alert('Saved as "' + saveName.trim() + '"')
+  }
+
+  // Load a saved document
+  const loadDocument = async (docId) => {
+    const { data } = await supabase.from('photo_album_data').select('*').eq('id', docId).single()
+    if (data && data.photos) {
+      setPhotos(data.photos)
+      setCurrentDocName(data.doc_name || 'Untitled')
+    }
+  }
+
+  // Delete a saved document
+  const deleteDocument = async (docId) => {
+    if (!confirm('Delete this saved document?')) return
+    await supabase.from('photo_album_data').delete().eq('id', docId)
+    const { data } = await supabase.from('photo_album_data').select('id, doc_name, updated_at').eq('user_id', user.id).order('updated_at', { ascending: false })
+    if (data) setSavedDocs(data)
+  }
 
   const categories = [
     { id: 'first_meeting', title: '💕 How We First Met', description: 'Photos from when you first met or early dating', slots: 3 },
@@ -2532,10 +2576,50 @@ function PhotoAlbumOrganizer({ user }) {
     <div className="space-y-6">
       <div className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-xl p-6">
         <h2 className="text-xl font-semibold text-slate-800 mb-2">📷 Relationship Photo Album</h2>
-        <p className="text-slate-600 mb-4">
+        <p className="text-slate-600 mb-2">
           Organize 20 photographs that tell the story of your relationship. IRCC recommends photos from different occasions 
           with dates and descriptions on the back.
         </p>
+
+        {/* Current document name + Save As */}
+        <div className="flex items-center gap-3 mb-4 bg-white rounded-lg p-3 border border-purple-100">
+          <span className="text-sm text-slate-500">Working on:</span>
+          <span className="font-medium text-slate-800">{currentDocName || 'Untitled'}</span>
+          <button onClick={() => { setSaveName(currentDocName || ''); setShowSaveDialog(true) }} className="ml-auto px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-medium rounded-lg">
+            💾 Save As...
+          </button>
+        </div>
+
+        {/* Save As Dialog */}
+        {showSaveDialog && (
+          <div className="mb-4 bg-white rounded-lg p-4 border border-purple-200">
+            <label className="block text-sm font-medium text-slate-700 mb-2">Save document as:</label>
+            <div className="flex gap-2">
+              <input type="text" value={saveName} onChange={(e) => setSaveName(e.target.value)} placeholder="e.g., Maria & John - Photo Album v2" className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent" />
+              <button onClick={saveAs} disabled={!saveName.trim()} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg disabled:bg-slate-300">Save</button>
+              <button onClick={() => setShowSaveDialog(false)} className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-600 text-sm font-medium rounded-lg">Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {/* Saved Documents List */}
+        {savedDocs.length > 1 && (
+          <div className="mb-4 bg-white rounded-lg p-4 border border-purple-100">
+            <h4 className="text-sm font-medium text-slate-700 mb-2">📂 My Saved Documents</h4>
+            <div className="space-y-2 max-h-40 overflow-y-auto">
+              {savedDocs.map(doc => (
+                <div key={doc.id} className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-purple-50">
+                  <span className="text-sm text-slate-700">{doc.doc_name || 'Untitled'}</span>
+                  <div className="flex gap-2">
+                    <span className="text-xs text-slate-400">{new Date(doc.updated_at).toLocaleDateString()}</span>
+                    <button onClick={() => loadDocument(doc.id)} className="text-xs text-purple-600 hover:text-purple-800 font-medium">Load</button>
+                    <button onClick={() => deleteDocument(doc.id)} className="text-xs text-red-500 hover:text-red-700">Delete</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         
         <div className="bg-white rounded-lg p-4 mb-4">
           <div className="flex justify-between items-center mb-2">
