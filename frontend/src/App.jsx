@@ -2906,6 +2906,42 @@ function FormPackageGenerator({ user, formData }) {
     saveTracker(updated)
   }
 
+  // Upload a filled PDF for a form
+  const uploadFormPDF = async (formId, file) => {
+    if (!user?.id || user.id === 'admin' || !file) return
+    const filePath = `${user.id}/${formId}_${Date.now()}.pdf`
+    const { error } = await supabase.storage.from('form-uploads').upload(filePath, file, { upsert: true })
+    if (error) { alert('Upload failed: ' + error.message); return }
+    // Save file path in tracker
+    const updated = { ...formTracker, [formId]: { ...(formTracker[formId] || {}), filePath, fileName: file.name, uploadedAt: new Date().toISOString() } }
+    setFormTracker(updated)
+    saveTracker(updated)
+  }
+
+  // Download a previously uploaded PDF
+  const downloadFormPDF = async (formId) => {
+    const tracker = formTracker[formId]
+    if (!tracker?.filePath) return
+    const { data, error } = await supabase.storage.from('form-uploads').download(tracker.filePath)
+    if (error) { alert('Download failed: ' + error.message); return }
+    const url = window.URL.createObjectURL(data)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = tracker.fileName || `${formId}.pdf`
+    a.click()
+    window.URL.revokeObjectURL(url)
+  }
+
+  // Delete an uploaded PDF
+  const deleteFormPDF = async (formId) => {
+    const tracker = formTracker[formId]
+    if (!tracker?.filePath) return
+    await supabase.storage.from('form-uploads').remove([tracker.filePath])
+    const updated = { ...formTracker, [formId]: { ...(formTracker[formId] || {}), filePath: null, fileName: null, uploadedAt: null } }
+    setFormTracker(updated)
+    saveTracker(updated)
+  }
+
   const selectPackage = (pkgId) => {
     setSelectedPackage(pkgId)
     saveTracker(formTracker, pkgId)
@@ -2986,6 +3022,7 @@ function FormPackageGenerator({ user, formData }) {
         {currentPackage.forms.map(form => {
           const tracker = formTracker[form.id] || {}
           const status = tracker.status || 'not_started'
+          const hasUpload = !!tracker.filePath
           return (
             <div key={form.id} className={`bg-white rounded-xl border p-5 ${status === 'done' ? 'border-green-200 bg-green-50/30' : status === 'in_progress' ? 'border-amber-200' : 'border-slate-200'}`}>
               <div className="flex items-start justify-between gap-4">
@@ -2994,12 +3031,27 @@ function FormPackageGenerator({ user, formData }) {
                     <span className={`text-lg font-bold ${status === 'done' ? 'text-green-600' : 'text-red-600'}`}>{form.name}</span>
                     {form.optional && <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded">Optional</span>}
                     {status === 'done' && <span className="text-green-500">✓</span>}
+                    {hasUpload && <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">Saved ✓</span>}
                   </div>
                   <p className="text-sm text-slate-600 mb-3">{form.title}</p>
                   <div className="flex flex-wrap gap-2">
                     <a href={form.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-medium rounded-lg transition-colors">
-                      📥 Download PDF
+                      📥 Download Blank
                     </a>
+                    <label className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition-colors cursor-pointer">
+                      📤 Upload My Copy
+                      <input type="file" accept=".pdf" className="hidden" onChange={(e) => { if (e.target.files[0]) uploadFormPDF(form.id, e.target.files[0]); e.target.value = '' }} />
+                    </label>
+                    {hasUpload && (
+                      <button onClick={() => downloadFormPDF(form.id)} className="inline-flex items-center gap-1 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-medium rounded-lg transition-colors">
+                        💾 Download My Copy
+                      </button>
+                    )}
+                    {hasUpload && (
+                      <button onClick={() => deleteFormPDF(form.id)} className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-600 text-xs font-medium rounded-lg transition-colors">
+                        🗑️ Remove
+                      </button>
+                    )}
                     <select
                       value={status}
                       onChange={(e) => updateFormStatus(form.id, e.target.value)}
@@ -3014,6 +3066,9 @@ function FormPackageGenerator({ user, formData }) {
                       <option value="done">Complete ✓</option>
                     </select>
                   </div>
+                  {hasUpload && (
+                    <p className="text-xs text-blue-600 mt-2">📎 {tracker.fileName} — saved {new Date(tracker.uploadedAt).toLocaleDateString()}</p>
+                  )}
                 </div>
               </div>
               {/* Notes */}
@@ -3604,58 +3659,3 @@ function UserHistory({ user }) {
       <div className="p-6">
         {activeTab === 'predictions' && (
           predictions.length === 0 ? (
-            <p className="text-slate-500 text-center py-8">No predictions yet. Analyze a case to get started.</p>
-          ) : (
-            <div className="space-y-4">
-              {predictions.map(p => (
-                <div key={p.id} className="border border-slate-200 rounded-lg p-4">
-                  <div className="flex justify-between items-start mb-3">
-                    <div>
-                      <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${p.prediction === 'Allowed' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                        {p.prediction}
-                      </span>
-                      <span className="ml-3 text-sm text-slate-500">{(p.confidence * 100).toFixed(1)}% confidence</span>
-                    </div>
-                    <span className="text-xs text-slate-400">{new Date(p.created_at).toLocaleDateString()}</span>
-                  </div>
-                  <p className="text-sm text-slate-600 line-clamp-2">{p.case_text}</p>
-                  {p.country_of_origin && <p className="text-xs text-slate-500 mt-2">Country: {p.country_of_origin}</p>}
-                </div>
-              ))}
-            </div>
-          )
-        )}
-        {activeTab === 'forms' && (
-          forms.length === 0 ? (
-            <p className="text-slate-500 text-center py-8">No saved forms yet. Start a sponsorship application to get started.</p>
-          ) : (
-            <div className="space-y-4">
-              {forms.map(f => (
-                <div key={f.id} className="border border-slate-200 rounded-lg p-4">
-                  <div className="flex justify-between items-start mb-3">
-                    <div>
-                      <span className="font-medium text-slate-800">
-                        {f.form_data?.sponsor_family_name}, {f.form_data?.sponsor_given_name}
-                      </span>
-                      <span className="ml-3 text-sm text-slate-500">sponsoring</span>
-                      <span className="ml-1 font-medium text-slate-800">
-                        {f.form_data?.applicant_family_name}, {f.form_data?.applicant_given_name}
-                      </span>
-                    </div>
-                    <span className="text-xs text-slate-400">{new Date(f.created_at).toLocaleDateString()}</span>
-                  </div>
-                  <div className="flex gap-4 text-sm text-slate-500">
-                    <span>Type: {f.form_data?.relationship_type?.replace('_', ' ') || '—'}</span>
-                    <span>Status: {f.status}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )
-        )}
-      </div>
-    </div>
-  )
-}
-
-export default App
