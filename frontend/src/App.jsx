@@ -2014,18 +2014,13 @@ function ProofOfRelationship({ user }) {
   // Load saved documents list
   useEffect(() => {
     if (!user?.id) return
-    supabase.from('proof_entries').select('id, doc_name, updated_at').eq('user_id', user.id).order('updated_at', { ascending: false }).then(({ data }) => {
-      if (data) setSavedDocs(data)
-    })
-  }, [user?.id])
-
-  // Auto-save: Load most recent on mount
-  useEffect(() => {
-    if (!user?.id) return
-    supabase.from('proof_entries').select('*').eq('user_id', user.id).order('updated_at', { ascending: false }).limit(1).then(({ data }) => {
-      if (data && data.length > 0 && data[0].entries) {
-        setEntries(data[0].entries)
-        setCurrentDocName(data[0].doc_name || 'Untitled')
+    supabase.from('proof_entries').select('id, doc_name, updated_at, entries').eq('user_id', user.id).order('updated_at', { ascending: false }).then(({ data }) => {
+      if (data) setSavedDocs(data.filter(d => d.entries && d.entries.length > 0))
+      // Auto-load most recent with data
+      const withData = data?.filter(d => d.entries && d.entries.length > 0)
+      if (withData && withData.length > 0) {
+        setEntries(withData[0].entries)
+        setCurrentDocName(withData[0].doc_name || 'Untitled')
       }
     })
   }, [user?.id])
@@ -2034,7 +2029,7 @@ function ProofOfRelationship({ user }) {
   useEffect(() => {
     if (!user?.id || entries.length === 0) return
     const timer = setTimeout(async () => {
-      const { data: existing } = await supabase.from('proof_entries').select('id').eq('user_id', user.id).order('updated_at', { ascending: false }).limit(1)
+      const { data: existing } = await supabase.from('proof_entries').select('id').eq('user_id', user.id).eq('doc_name', currentDocName || 'Untitled').limit(1)
       const payload = { user_id: user.id, entries, doc_name: currentDocName || 'Untitled', updated_at: new Date().toISOString() }
       if (existing && existing.length > 0) {
         await supabase.from('proof_entries').update(payload).eq('id', existing[0].id)
@@ -2047,23 +2042,25 @@ function ProofOfRelationship({ user }) {
 
   // Save As — create a new named document
   const saveAsComm = async () => {
-    if (!saveName.trim() || !user?.id) return
+    if (!saveName.trim() || !user?.id || entries.length === 0) return
     const payload = { user_id: user.id, entries, doc_name: saveName.trim(), updated_at: new Date().toISOString() }
     await supabase.from('proof_entries').insert(payload)
     setCurrentDocName(saveName.trim())
     setShowSaveDialog(false)
     setSaveName('')
-    const { data } = await supabase.from('proof_entries').select('id, doc_name, updated_at').eq('user_id', user.id).order('updated_at', { ascending: false })
-    if (data) setSavedDocs(data)
+    const { data } = await supabase.from('proof_entries').select('id, doc_name, updated_at, entries').eq('user_id', user.id).order('updated_at', { ascending: false })
+    if (data) setSavedDocs(data.filter(d => d.entries && d.entries.length > 0))
     alert('Saved as "' + saveName.trim() + '"')
   }
 
   // Load a saved document
   const loadDocumentComm = async (docId) => {
     const { data } = await supabase.from('proof_entries').select('*').eq('id', docId).single()
-    if (data && data.entries) {
+    if (data && data.entries && data.entries.length > 0) {
       setEntries(data.entries)
       setCurrentDocName(data.doc_name || 'Untitled')
+    } else {
+      alert('This document has no entries.')
     }
   }
 
@@ -2071,8 +2068,8 @@ function ProofOfRelationship({ user }) {
   const deleteDocumentComm = async (docId) => {
     if (!confirm('Delete this saved document?')) return
     await supabase.from('proof_entries').delete().eq('id', docId)
-    const { data } = await supabase.from('proof_entries').select('id, doc_name, updated_at').eq('user_id', user.id).order('updated_at', { ascending: false })
-    if (data) setSavedDocs(data)
+    const { data } = await supabase.from('proof_entries').select('id, doc_name, updated_at, entries').eq('user_id', user.id).order('updated_at', { ascending: false })
+    if (data) setSavedDocs(data.filter(d => d.entries && d.entries.length > 0))
   }
 
   const entryTypes = [
@@ -2466,18 +2463,14 @@ function PhotoAlbumOrganizer({ user }) {
   // Load saved documents list
   useEffect(() => {
     if (!user?.id) return
-    supabase.from('photo_album_data').select('id, doc_name, updated_at').eq('user_id', user.id).order('updated_at', { ascending: false }).then(({ data }) => {
-      if (data) setSavedDocs(data)
-    })
-  }, [user?.id])
-
-  // Auto-save: Load most recent on mount
-  useEffect(() => {
-    if (!user?.id) return
-    supabase.from('photo_album_data').select('*').eq('user_id', user.id).order('updated_at', { ascending: false }).limit(1).then(({ data }) => {
-      if (data && data.length > 0 && data[0].photos) {
-        setPhotos(data[0].photos)
-        setCurrentDocName(data[0].doc_name || 'Untitled')
+    supabase.from('photo_album_data').select('*').eq('user_id', user.id).order('updated_at', { ascending: false }).then(({ data }) => {
+      if (data && data.length > 0) {
+        setSavedDocs(data)
+        // Auto-load most recent
+        if (data[0].photos && Object.keys(data[0].photos).length > 0) {
+          setPhotos(data[0].photos)
+          setCurrentDocName(data[0].doc_name || 'Untitled')
+        }
       }
     })
   }, [user?.id])
@@ -2506,7 +2499,7 @@ function PhotoAlbumOrganizer({ user }) {
     setShowSaveDialog(false)
     setSaveName('')
     // Refresh list
-    const { data } = await supabase.from('photo_album_data').select('id, doc_name, updated_at').eq('user_id', user.id).order('updated_at', { ascending: false })
+    const { data } = await supabase.from('photo_album_data').select('*').eq('user_id', user.id).order('updated_at', { ascending: false })
     if (data) setSavedDocs(data)
     alert('Saved as "' + saveName.trim() + '"')
   }
