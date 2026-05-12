@@ -3659,3 +3659,58 @@ function UserHistory({ user }) {
       <div className="p-6">
         {activeTab === 'predictions' && (
           predictions.length === 0 ? (
+            <p className="text-slate-500 text-center py-8">No predictions yet. Analyze a case to get started.</p>
+          ) : (
+            <div className="space-y-4">
+              {predictions.map(p => (
+                <div key={p.id} className="border border-slate-200 rounded-lg p-4">
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${p.prediction === 'Allowed' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                        {p.prediction}
+                      </span>
+                      <span className="ml-3 text-sm text-slate-500">{(p.confidence * 100).toFixed(1)}% confidence</span>
+                    </div>
+                    <span className="text-xs text-slate-400">{new Date(p.created_at).toLocaleDateString()}</span>
+                  </div>
+                  <p className="text-sm text-slate-600 line-clamp-2">{p.case_text}</p>
+                  {p.country_of_origin && <p className="text-xs text-slate-500 mt-2">Country: {p.country_of_origin}</p>}
+                </div>
+              ))}
+            </div>
+          )
+        )}
+        {activeTab === 'forms' && (
+          forms.length === 0 ? (
+            <p className="text-slate-500 text-center py-8">No saved forms yet. Start a sponsorship application to get started.</p>
+          ) : (
+            <div className="space-y-4">
+              {forms.map(f => (
+                <div key={f.id} className="border border-slate-200 rounded-lg p-4">
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <span className="font-medium text-slate-800">
+                        {f.form_data?.sponsor_family_name}, {f.form_data?.sponsor_given_name}
+                      </span>
+                      <span className="ml-3 text-sm text-slate-500">sponsoring</span>
+                      <span className="ml-1 font-medium text-slate-800">
+                        {f.form_data?.applicant_family_name}, {f.form_data?.applicant_given_name}
+                      </span>
+                    </div>
+                    <span className="text-xs text-slate-400">{new Date(f.created_at).toLocaleDateString()}</span>
+                  </div>
+                  <div className="flex gap-4 text-sm text-slate-500">
+                    <span>Type: {f.form_data?.relationship_type?.replace('_', ' ') || '—'}</span>
+                    <span>Status: {f.status}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        )}
+      </div>
+    </div>
+  )
+}
+
+export default App
