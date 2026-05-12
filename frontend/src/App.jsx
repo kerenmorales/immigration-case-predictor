@@ -2006,13 +2006,26 @@ function ProofOfRelationship({ user }) {
   const [entries, setEntries] = useState([])
   const [newEntry, setNewEntry] = useState({ type: 'text_message', date: '', content: '', description: '', image: null })
   const [loading, setLoading] = useState(false)
+  const [savedDocs, setSavedDocs] = useState([])
+  const [currentDocName, setCurrentDocName] = useState('')
+  const [showSaveDialog, setShowSaveDialog] = useState(false)
+  const [saveName, setSaveName] = useState('')
 
-  // Auto-save: Load entries from Supabase on mount
+  // Load saved documents list
+  useEffect(() => {
+    if (!user?.id) return
+    supabase.from('proof_entries').select('id, doc_name, updated_at').eq('user_id', user.id).order('updated_at', { ascending: false }).then(({ data }) => {
+      if (data) setSavedDocs(data)
+    })
+  }, [user?.id])
+
+  // Auto-save: Load most recent on mount
   useEffect(() => {
     if (!user?.id) return
     supabase.from('proof_entries').select('*').eq('user_id', user.id).order('updated_at', { ascending: false }).limit(1).then(({ data }) => {
       if (data && data.length > 0 && data[0].entries) {
         setEntries(data[0].entries)
+        setCurrentDocName(data[0].doc_name || 'Untitled')
       }
     })
   }, [user?.id])
@@ -2021,8 +2034,8 @@ function ProofOfRelationship({ user }) {
   useEffect(() => {
     if (!user?.id || entries.length === 0) return
     const timer = setTimeout(async () => {
-      const { data: existing } = await supabase.from('proof_entries').select('id').eq('user_id', user.id).limit(1)
-      const payload = { user_id: user.id, entries, updated_at: new Date().toISOString() }
+      const { data: existing } = await supabase.from('proof_entries').select('id').eq('user_id', user.id).order('updated_at', { ascending: false }).limit(1)
+      const payload = { user_id: user.id, entries, doc_name: currentDocName || 'Untitled', updated_at: new Date().toISOString() }
       if (existing && existing.length > 0) {
         await supabase.from('proof_entries').update(payload).eq('id', existing[0].id)
       } else {
@@ -2031,6 +2044,36 @@ function ProofOfRelationship({ user }) {
     }, 2000)
     return () => clearTimeout(timer)
   }, [entries, user?.id])
+
+  // Save As — create a new named document
+  const saveAsComm = async () => {
+    if (!saveName.trim() || !user?.id) return
+    const payload = { user_id: user.id, entries, doc_name: saveName.trim(), updated_at: new Date().toISOString() }
+    await supabase.from('proof_entries').insert(payload)
+    setCurrentDocName(saveName.trim())
+    setShowSaveDialog(false)
+    setSaveName('')
+    const { data } = await supabase.from('proof_entries').select('id, doc_name, updated_at').eq('user_id', user.id).order('updated_at', { ascending: false })
+    if (data) setSavedDocs(data)
+    alert('Saved as "' + saveName.trim() + '"')
+  }
+
+  // Load a saved document
+  const loadDocumentComm = async (docId) => {
+    const { data } = await supabase.from('proof_entries').select('*').eq('id', docId).single()
+    if (data && data.entries) {
+      setEntries(data.entries)
+      setCurrentDocName(data.doc_name || 'Untitled')
+    }
+  }
+
+  // Delete a saved document
+  const deleteDocumentComm = async (docId) => {
+    if (!confirm('Delete this saved document?')) return
+    await supabase.from('proof_entries').delete().eq('id', docId)
+    const { data } = await supabase.from('proof_entries').select('id, doc_name, updated_at').eq('user_id', user.id).order('updated_at', { ascending: false })
+    if (data) setSavedDocs(data)
+  }
 
   const entryTypes = [
     { value: 'text_message', label: '💬 Text Message', icon: '💬' },
@@ -2121,9 +2164,49 @@ function ProofOfRelationship({ user }) {
     <div className="space-y-6">
       <div className="bg-gradient-to-r from-pink-50 to-red-50 border border-pink-200 rounded-xl p-6">
         <h2 className="text-xl font-semibold text-slate-800 mb-2">💕 Proof of Relationship Organizer</h2>
-        <p className="text-slate-600 mb-4">
+        <p className="text-slate-600 mb-2">
           Organize your communication evidence for IMM 5532. IRCC recommends at least 10 pages of proof showing your relationship is genuine.
         </p>
+
+        {/* Current document name + Save As */}
+        <div className="flex items-center gap-3 mb-4 bg-white rounded-lg p-3 border border-pink-100">
+          <span className="text-sm text-slate-500">Working on:</span>
+          <span className="font-medium text-slate-800">{currentDocName || 'Untitled'}</span>
+          <button onClick={() => { setSaveName(currentDocName || ''); setShowSaveDialog(true) }} className="ml-auto px-3 py-1.5 bg-pink-600 hover:bg-pink-700 text-white text-xs font-medium rounded-lg">
+            💾 Save As...
+          </button>
+        </div>
+
+        {/* Save As Dialog */}
+        {showSaveDialog && (
+          <div className="mb-4 bg-white rounded-lg p-4 border border-pink-200">
+            <label className="block text-sm font-medium text-slate-700 mb-2">Save document as:</label>
+            <div className="flex gap-2">
+              <input type="text" value={saveName} onChange={(e) => setSaveName(e.target.value)} placeholder="e.g., Communication Evidence - March 2025" className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-pink-500 focus:border-transparent" />
+              <button onClick={saveAsComm} disabled={!saveName.trim()} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg disabled:bg-slate-300">Save</button>
+              <button onClick={() => setShowSaveDialog(false)} className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-600 text-sm font-medium rounded-lg">Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {/* Saved Documents List */}
+        {savedDocs.length > 1 && (
+          <div className="mb-4 bg-white rounded-lg p-4 border border-pink-100">
+            <h4 className="text-sm font-medium text-slate-700 mb-2">📂 My Saved Documents</h4>
+            <div className="space-y-2 max-h-40 overflow-y-auto">
+              {savedDocs.map(doc => (
+                <div key={doc.id} className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-pink-50">
+                  <span className="text-sm text-slate-700">{doc.doc_name || 'Untitled'}</span>
+                  <div className="flex gap-2">
+                    <span className="text-xs text-slate-400">{new Date(doc.updated_at).toLocaleDateString()}</span>
+                    <button onClick={() => loadDocumentComm(doc.id)} className="text-xs text-pink-600 hover:text-pink-800 font-medium">Load</button>
+                    <button onClick={() => deleteDocumentComm(doc.id)} className="text-xs text-red-500 hover:text-red-700">Delete</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         
         <div className="bg-white rounded-lg p-4">
           <div className="flex justify-between items-center mb-2">
