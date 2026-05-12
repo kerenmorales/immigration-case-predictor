@@ -2476,12 +2476,10 @@ function PhotoAlbumOrganizer({ user }) {
   const [showSaveDialog, setShowSaveDialog] = useState(false)
   const [saveName, setSaveName] = useState('')
   const [currentDocId, setCurrentDocId] = useState(null)
-  const isLoadingDoc = useRef(false)
 
-  // Load saved documents list
+  // Load saved documents list on mount
   useEffect(() => {
     if (!user?.id) return
-    isLoadingDoc.current = true
     supabase.from('photo_album_data').select('*').eq('user_id', user.id).order('updated_at', { ascending: false }).then(({ data }) => {
       if (data && data.length > 0) {
         setSavedDocs(data)
@@ -2491,25 +2489,21 @@ function PhotoAlbumOrganizer({ user }) {
           setCurrentDocId(data[0].id)
         }
       }
-      setTimeout(() => { isLoadingDoc.current = false }, 3000)
     })
   }, [user?.id])
 
-  // Auto-save: Save photos to Supabase when they change
-  useEffect(() => {
-    if (!user?.id || Object.keys(photos).length === 0 || isLoadingDoc.current) return
-    const timer = setTimeout(async () => {
-      if (isLoadingDoc.current) return
-      const payload = { user_id: user.id, photos, doc_name: currentDocName || 'Untitled', updated_at: new Date().toISOString() }
-      if (currentDocId) {
-        await supabase.from('photo_album_data').update(payload).eq('id', currentDocId)
-      } else {
-        const { data } = await supabase.from('photo_album_data').insert(payload).select('id')
-        if (data && data[0]) setCurrentDocId(data[0].id)
-      }
-    }, 3000)
-    return () => clearTimeout(timer)
-  }, [photos, user?.id])
+  // Manual Save — update current document
+  const saveCurrentDoc = async () => {
+    if (!user?.id || Object.keys(photos).length === 0) return
+    const payload = { user_id: user.id, photos, doc_name: currentDocName || 'Untitled', updated_at: new Date().toISOString() }
+    if (currentDocId) {
+      await supabase.from('photo_album_data').update(payload).eq('id', currentDocId)
+    } else {
+      const { data } = await supabase.from('photo_album_data').insert(payload).select('id')
+      if (data && data[0]) setCurrentDocId(data[0].id)
+    }
+    alert('Saved!')
+  }
 
   // Save As — create a new named document
   const saveAs = async () => {
@@ -2527,14 +2521,12 @@ function PhotoAlbumOrganizer({ user }) {
 
   // Load a saved document
   const loadDocument = async (docId) => {
-    isLoadingDoc.current = true
     const { data } = await supabase.from('photo_album_data').select('*').eq('id', docId).single()
     if (data && data.photos) {
       setPhotos(data.photos)
       setCurrentDocName(data.doc_name || 'Untitled')
       setCurrentDocId(data.id)
     }
-    setTimeout(() => { isLoadingDoc.current = false }, 3000)
   }
 
   // Delete a saved document
@@ -2543,6 +2535,7 @@ function PhotoAlbumOrganizer({ user }) {
     await supabase.from('photo_album_data').delete().eq('id', docId)
     const { data } = await supabase.from('photo_album_data').select('*').eq('user_id', user.id).order('updated_at', { ascending: false })
     if (data) setSavedDocs(data)
+    if (docId === currentDocId) { setCurrentDocId(null); setPhotos({}); setCurrentDocName('') }
   }
 
   const categories = [
@@ -2685,8 +2678,11 @@ function PhotoAlbumOrganizer({ user }) {
         <div className="flex items-center gap-3 mb-4 bg-white rounded-lg p-3 border border-purple-100">
           <span className="text-sm text-slate-500">Working on:</span>
           <span className="font-medium text-slate-800">{currentDocName || 'Untitled'}</span>
-          <button onClick={() => { setSaveName(currentDocName || ''); setShowSaveDialog(true) }} className="ml-auto px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-medium rounded-lg">
-            💾 Save As...
+          <button onClick={saveCurrentDoc} className="ml-auto px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-medium rounded-lg">
+            💾 Save
+          </button>
+          <button onClick={() => { setSaveName(currentDocName || ''); setShowSaveDialog(true) }} className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-medium rounded-lg">
+            � Save As...
           </button>
         </div>
 
