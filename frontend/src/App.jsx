@@ -2011,12 +2011,10 @@ function ProofOfRelationship({ user }) {
   const [currentDocId, setCurrentDocId] = useState(null)
   const [showSaveDialog, setShowSaveDialog] = useState(false)
   const [saveName, setSaveName] = useState('')
-  const isLoadingDoc = useRef(false)
 
-  // Load saved documents list and auto-load most recent
+  // Load saved documents list on mount
   useEffect(() => {
     if (!user?.id) return
-    isLoadingDoc.current = true
     supabase.from('proof_entries').select('*').eq('user_id', user.id).order('updated_at', { ascending: false }).then(({ data }) => {
       if (data) {
         const withData = data.filter(d => d.entries && d.entries.length > 0)
@@ -2027,27 +2025,23 @@ function ProofOfRelationship({ user }) {
           setCurrentDocId(withData[0].id)
         }
       }
-      setTimeout(() => { isLoadingDoc.current = false }, 3000)
     })
   }, [user?.id])
 
-  // Auto-save: Save entries to Supabase when they change
-  useEffect(() => {
-    if (!user?.id || entries.length === 0 || isLoadingDoc.current) return
-    const timer = setTimeout(async () => {
-      if (isLoadingDoc.current) return
-      const payload = { user_id: user.id, entries, doc_name: currentDocName || 'Untitled', updated_at: new Date().toISOString() }
-      if (currentDocId) {
-        await supabase.from('proof_entries').update(payload).eq('id', currentDocId)
-      } else {
-        const { data } = await supabase.from('proof_entries').insert(payload).select('id')
-        if (data && data[0]) setCurrentDocId(data[0].id)
-      }
-    }, 3000)
-    return () => clearTimeout(timer)
-  }, [entries, user?.id])
+  // Manual Save
+  const saveCurrentDocComm = async () => {
+    if (!user?.id || entries.length === 0) return
+    const payload = { user_id: user.id, entries, doc_name: currentDocName || 'Untitled', updated_at: new Date().toISOString() }
+    if (currentDocId) {
+      await supabase.from('proof_entries').update(payload).eq('id', currentDocId)
+    } else {
+      const { data } = await supabase.from('proof_entries').insert(payload).select('id')
+      if (data && data[0]) setCurrentDocId(data[0].id)
+    }
+    alert('Saved!')
+  }
 
-  // Save As — create a new named document
+  // Save As
   const saveAsComm = async () => {
     if (!saveName.trim() || !user?.id || entries.length === 0) return
     const payload = { user_id: user.id, entries, doc_name: saveName.trim(), updated_at: new Date().toISOString() }
@@ -2063,7 +2057,6 @@ function ProofOfRelationship({ user }) {
 
   // Load a saved document
   const loadDocumentComm = async (docId) => {
-    isLoadingDoc.current = true
     const { data } = await supabase.from('proof_entries').select('*').eq('id', docId).single()
     if (data && data.entries && data.entries.length > 0) {
       setEntries(data.entries)
@@ -2072,7 +2065,6 @@ function ProofOfRelationship({ user }) {
     } else {
       alert('This document has no entries.')
     }
-    setTimeout(() => { isLoadingDoc.current = false }, 3000)
   }
 
   // Delete a saved document
@@ -2081,11 +2073,7 @@ function ProofOfRelationship({ user }) {
     await supabase.from('proof_entries').delete().eq('id', docId)
     const { data } = await supabase.from('proof_entries').select('*').eq('user_id', user.id).order('updated_at', { ascending: false })
     if (data) setSavedDocs(data.filter(d => d.entries && d.entries.length > 0))
-    if (docId === currentDocId) {
-      setCurrentDocId(null)
-      setEntries([])
-      setCurrentDocName('')
-    }
+    if (docId === currentDocId) { setCurrentDocId(null); setEntries([]); setCurrentDocName('') }
   }
 
   const entryTypes = [
@@ -2185,8 +2173,11 @@ function ProofOfRelationship({ user }) {
         <div className="flex items-center gap-3 mb-4 bg-white rounded-lg p-3 border border-pink-100">
           <span className="text-sm text-slate-500">Working on:</span>
           <span className="font-medium text-slate-800">{currentDocName || 'Untitled'}</span>
-          <button onClick={() => { setSaveName(currentDocName || ''); setShowSaveDialog(true) }} className="ml-auto px-3 py-1.5 bg-pink-600 hover:bg-pink-700 text-white text-xs font-medium rounded-lg">
-            💾 Save As...
+          <button onClick={saveCurrentDocComm} className="ml-auto px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-medium rounded-lg">
+            💾 Save
+          </button>
+          <button onClick={() => { setSaveName(currentDocName || ''); setShowSaveDialog(true) }} className="px-3 py-1.5 bg-pink-600 hover:bg-pink-700 text-white text-xs font-medium rounded-lg">
+            📄 Save As...
           </button>
         </div>
 
@@ -2495,13 +2486,15 @@ function PhotoAlbumOrganizer({ user }) {
   // Manual Save — update current document
   const saveCurrentDoc = async () => {
     if (!user?.id || Object.keys(photos).length === 0) return
-    const payload = { user_id: user.id, photos, doc_name: currentDocName || 'Untitled', updated_at: new Date().toISOString() }
-    if (currentDocId) {
-      await supabase.from('photo_album_data').update(payload).eq('id', currentDocId)
-    } else {
-      const { data } = await supabase.from('photo_album_data').insert(payload).select('id')
-      if (data && data[0]) setCurrentDocId(data[0].id)
+    if (!currentDocId) {
+      // No document yet — prompt to Save As instead
+      setShowSaveDialog(true)
+      return
     }
+    const payload = { user_id: user.id, photos, doc_name: currentDocName || 'Untitled', updated_at: new Date().toISOString() }
+    await supabase.from('photo_album_data').update(payload).eq('id', currentDocId)
+    const { data } = await supabase.from('photo_album_data').select('*').eq('user_id', user.id).order('updated_at', { ascending: false })
+    if (data) setSavedDocs(data)
     alert('Saved!')
   }
 
@@ -2516,7 +2509,14 @@ function PhotoAlbumOrganizer({ user }) {
     setSaveName('')
     const { data } = await supabase.from('photo_album_data').select('*').eq('user_id', user.id).order('updated_at', { ascending: false })
     if (data) setSavedDocs(data)
-    alert('Saved as "' + saveName.trim() + '"')
+    alert('Saved as "' + saveName.trim() + '"\n\nYou can now start a new album or Load a saved one.')
+  }
+
+  // Start New — clear form for a fresh album
+  const startNewAlbum = () => {
+    setPhotos({})
+    setCurrentDocName('')
+    setCurrentDocId(null)
   }
 
   // Load a saved document
@@ -2677,12 +2677,15 @@ function PhotoAlbumOrganizer({ user }) {
         {/* Current document name + Save As */}
         <div className="flex items-center gap-3 mb-4 bg-white rounded-lg p-3 border border-purple-100">
           <span className="text-sm text-slate-500">Working on:</span>
-          <span className="font-medium text-slate-800">{currentDocName || 'Untitled'}</span>
+          <span className="font-medium text-slate-800">{currentDocName || 'New Album'}</span>
           <button onClick={saveCurrentDoc} className="ml-auto px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-medium rounded-lg">
             💾 Save
           </button>
-          <button onClick={() => { setSaveName(currentDocName || ''); setShowSaveDialog(true) }} className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-medium rounded-lg">
-            � Save As...
+          <button onClick={() => { setSaveName(''); setShowSaveDialog(true) }} className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-medium rounded-lg">
+            📄 Save As...
+          </button>
+          <button onClick={startNewAlbum} className="px-3 py-1.5 bg-slate-500 hover:bg-slate-600 text-white text-xs font-medium rounded-lg">
+            🆕 New
           </button>
         </div>
 
