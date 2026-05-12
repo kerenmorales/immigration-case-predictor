@@ -2011,10 +2011,12 @@ function ProofOfRelationship({ user }) {
   const [currentDocId, setCurrentDocId] = useState(null)
   const [showSaveDialog, setShowSaveDialog] = useState(false)
   const [saveName, setSaveName] = useState('')
+  const isLoadingDoc = useRef(false)
 
   // Load saved documents list and auto-load most recent
   useEffect(() => {
     if (!user?.id) return
+    isLoadingDoc.current = true
     supabase.from('proof_entries').select('*').eq('user_id', user.id).order('updated_at', { ascending: false }).then(({ data }) => {
       if (data) {
         const withData = data.filter(d => d.entries && d.entries.length > 0)
@@ -2025,13 +2027,15 @@ function ProofOfRelationship({ user }) {
           setCurrentDocId(withData[0].id)
         }
       }
+      setTimeout(() => { isLoadingDoc.current = false }, 3000)
     })
   }, [user?.id])
 
   // Auto-save: Save entries to Supabase when they change
   useEffect(() => {
-    if (!user?.id || entries.length === 0) return
+    if (!user?.id || entries.length === 0 || isLoadingDoc.current) return
     const timer = setTimeout(async () => {
+      if (isLoadingDoc.current) return
       const payload = { user_id: user.id, entries, doc_name: currentDocName || 'Untitled', updated_at: new Date().toISOString() }
       if (currentDocId) {
         await supabase.from('proof_entries').update(payload).eq('id', currentDocId)
@@ -2039,7 +2043,7 @@ function ProofOfRelationship({ user }) {
         const { data } = await supabase.from('proof_entries').insert(payload).select('id')
         if (data && data[0]) setCurrentDocId(data[0].id)
       }
-    }, 2000)
+    }, 3000)
     return () => clearTimeout(timer)
   }, [entries, user?.id])
 
@@ -2059,6 +2063,7 @@ function ProofOfRelationship({ user }) {
 
   // Load a saved document
   const loadDocumentComm = async (docId) => {
+    isLoadingDoc.current = true
     const { data } = await supabase.from('proof_entries').select('*').eq('id', docId).single()
     if (data && data.entries && data.entries.length > 0) {
       setEntries(data.entries)
@@ -2067,6 +2072,7 @@ function ProofOfRelationship({ user }) {
     } else {
       alert('This document has no entries.')
     }
+    setTimeout(() => { isLoadingDoc.current = false }, 3000)
   }
 
   // Delete a saved document
@@ -2469,34 +2475,39 @@ function PhotoAlbumOrganizer({ user }) {
   const [currentDocName, setCurrentDocName] = useState('')
   const [showSaveDialog, setShowSaveDialog] = useState(false)
   const [saveName, setSaveName] = useState('')
+  const [currentDocId, setCurrentDocId] = useState(null)
+  const isLoadingDoc = useRef(false)
 
   // Load saved documents list
   useEffect(() => {
     if (!user?.id) return
+    isLoadingDoc.current = true
     supabase.from('photo_album_data').select('*').eq('user_id', user.id).order('updated_at', { ascending: false }).then(({ data }) => {
       if (data && data.length > 0) {
         setSavedDocs(data)
-        // Auto-load most recent
         if (data[0].photos && Object.keys(data[0].photos).length > 0) {
           setPhotos(data[0].photos)
           setCurrentDocName(data[0].doc_name || 'Untitled')
+          setCurrentDocId(data[0].id)
         }
       }
+      setTimeout(() => { isLoadingDoc.current = false }, 3000)
     })
   }, [user?.id])
 
   // Auto-save: Save photos to Supabase when they change
   useEffect(() => {
-    if (!user?.id || Object.keys(photos).length === 0) return
+    if (!user?.id || Object.keys(photos).length === 0 || isLoadingDoc.current) return
     const timer = setTimeout(async () => {
-      const { data: existing } = await supabase.from('photo_album_data').select('id').eq('user_id', user.id).order('updated_at', { ascending: false }).limit(1)
+      if (isLoadingDoc.current) return
       const payload = { user_id: user.id, photos, doc_name: currentDocName || 'Untitled', updated_at: new Date().toISOString() }
-      if (existing && existing.length > 0) {
-        await supabase.from('photo_album_data').update(payload).eq('id', existing[0].id)
+      if (currentDocId) {
+        await supabase.from('photo_album_data').update(payload).eq('id', currentDocId)
       } else {
-        await supabase.from('photo_album_data').insert(payload)
+        const { data } = await supabase.from('photo_album_data').insert(payload).select('id')
+        if (data && data[0]) setCurrentDocId(data[0].id)
       }
-    }, 2000)
+    }, 3000)
     return () => clearTimeout(timer)
   }, [photos, user?.id])
 
@@ -2504,11 +2515,11 @@ function PhotoAlbumOrganizer({ user }) {
   const saveAs = async () => {
     if (!saveName.trim() || !user?.id) return
     const payload = { user_id: user.id, photos, doc_name: saveName.trim(), updated_at: new Date().toISOString() }
-    await supabase.from('photo_album_data').insert(payload)
+    const { data: inserted } = await supabase.from('photo_album_data').insert(payload).select('id')
+    if (inserted && inserted[0]) setCurrentDocId(inserted[0].id)
     setCurrentDocName(saveName.trim())
     setShowSaveDialog(false)
     setSaveName('')
-    // Refresh list
     const { data } = await supabase.from('photo_album_data').select('*').eq('user_id', user.id).order('updated_at', { ascending: false })
     if (data) setSavedDocs(data)
     alert('Saved as "' + saveName.trim() + '"')
@@ -2516,18 +2527,21 @@ function PhotoAlbumOrganizer({ user }) {
 
   // Load a saved document
   const loadDocument = async (docId) => {
+    isLoadingDoc.current = true
     const { data } = await supabase.from('photo_album_data').select('*').eq('id', docId).single()
     if (data && data.photos) {
       setPhotos(data.photos)
       setCurrentDocName(data.doc_name || 'Untitled')
+      setCurrentDocId(data.id)
     }
+    setTimeout(() => { isLoadingDoc.current = false }, 3000)
   }
 
   // Delete a saved document
   const deleteDocument = async (docId) => {
     if (!confirm('Delete this saved document?')) return
     await supabase.from('photo_album_data').delete().eq('id', docId)
-    const { data } = await supabase.from('photo_album_data').select('id, doc_name, updated_at').eq('user_id', user.id).order('updated_at', { ascending: false })
+    const { data } = await supabase.from('photo_album_data').select('*').eq('user_id', user.id).order('updated_at', { ascending: false })
     if (data) setSavedDocs(data)
   }
 
