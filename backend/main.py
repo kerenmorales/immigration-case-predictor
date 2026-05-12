@@ -39,6 +39,7 @@ async def load_model():
     global model, tokenizer, model_type
     
     # Skip model loading by default to save memory on Railway free tier
+    # Set LOAD_MODEL=true to enable model loading
     if os.environ.get("LOAD_MODEL", "").lower() not in ("1", "true", "yes"):
         print("Skipping model loading (set LOAD_MODEL=true to enable)")
         return
@@ -72,6 +73,7 @@ async def load_model():
     if torch.cuda.is_available():
         model = model.cuda()
         print("Using GPU")
+
 
 class CaseInput(BaseModel):
     text: str
@@ -2371,14 +2373,13 @@ def generate_proof_pdf(entries: list) -> bytes:
     # Sort entries by date
     sorted_entries = sorted(entries, key=lambda x: x.get('date', ''))
     
-    
-    for i, entry in enumerate(entries, 1):
+    for i, entry in enumerate(sorted_entries, 1):
         entry_type = entry.get('type', 'other')
         entry_date = entry.get('date', 'Unknown date')
         entry_content = entry.get('content', '')
         entry_desc = entry.get('description', '')
         entry_image = entry.get('image', '')
-
+        
         type_label = type_labels.get(entry_type, '📄 Other')
         
         # Entry header
@@ -2387,37 +2388,49 @@ def generate_proof_pdf(entries: list) -> bytes:
         
         if entry_desc:
             story.append(Paragraph(f"<i>Context: {entry_desc}</i>", meta_style))
-
-            
+        
+        # Add screenshot image if present
         if entry_image:
             try:
                 import base64
                 from PIL import Image as PILImage
                 from reportlab.platypus import Image as RLImage
+                
+                # Handle base64 image data
                 if entry_image.startswith('data:'):
                     base64_data = entry_image.split(',')[1]
                 else:
                     base64_data = entry_image
+                
                 image_bytes = base64.b64decode(base64_data)
                 pil_img = PILImage.open(io.BytesIO(image_bytes))
+                
+                # Convert to RGB if necessary
                 if pil_img.mode in ('RGBA', 'P'):
                     pil_img = pil_img.convert('RGB')
+                
+                # Save to buffer
                 img_buffer = io.BytesIO()
                 pil_img.save(img_buffer, format='JPEG', quality=85)
                 img_buffer.seek(0)
+                
+                # Calculate size to fit page
                 img_width, img_height = pil_img.size
                 max_width = 5 * inch
                 max_height = 4 * inch
                 scale = min(max_width / img_width, max_height / img_height)
+                
                 img_flowable = RLImage(img_buffer, width=img_width * scale, height=img_height * scale)
                 story.append(img_flowable)
                 story.append(Spacer(1, 10))
             except Exception as e:
+                print(f"Image processing error: {e}")
                 story.append(Paragraph("[Screenshot could not be processed]", meta_style))
         
         # Entry content in a box
-        content_text = entry_content.replace('\n', '<br/>')
-        story.append(Paragraph(content_text, content_style))
+        if entry_content:
+            content_text = entry_content.replace('\n', '<br/>')
+            story.append(Paragraph(content_text, content_style))
         
         # Add separator
         story.append(Spacer(1, 10))
@@ -2560,7 +2573,6 @@ def generate_photo_album_pdf(categories: list) -> bytes:
             location = photo.get('location', '')
             people = photo.get('people', '')
             description = photo.get('description', '')
-
             
             # Try to add the image
             if image_data:
@@ -2573,11 +2585,21 @@ def generate_photo_album_pdf(categories: list) -> bytes:
                         base64_data = image_data
                     
                     image_bytes = base64.b64decode(base64_data)
-                    image_buffer = io.BytesIO(image_bytes)
-                    img = ImageReader(image_buffer)
                     
-                    # Get image dimensions and scale to fit
-                    img_width, img_height = img.getSize()
+                    # Use PIL to get dimensions and convert to a format reportlab handles well
+                    from PIL import Image as PILImage
+                    pil_img = PILImage.open(io.BytesIO(image_bytes))
+                    img_width, img_height = pil_img.size
+                    
+                    # Convert to RGB if necessary (handles PNG with transparency)
+                    if pil_img.mode in ('RGBA', 'P'):
+                        pil_img = pil_img.convert('RGB')
+                    
+                    # Save to new buffer as JPEG for reportlab
+                    img_buffer = io.BytesIO()
+                    pil_img.save(img_buffer, format='JPEG', quality=85)
+                    img_buffer.seek(0)
+                    
                     max_width = 5 * inch
                     max_height = 3.5 * inch
                     
@@ -2591,10 +2613,11 @@ def generate_photo_album_pdf(categories: list) -> bytes:
                     
                     # Create image flowable
                     from reportlab.platypus import Image as RLImage
-                    img_flowable = RLImage(image_buffer, width=final_width, height=final_height)
+                    img_flowable = RLImage(img_buffer, width=final_width, height=final_height)
                     story.append(img_flowable)
                 except Exception as e:
                     # If image fails, add placeholder text
+                    print(f"Image processing error: {e}")
                     story.append(Paragraph(f"[Photo {i+1} - Image could not be processed]", caption_style))
             
             # Add photo metadata
@@ -2613,9 +2636,10 @@ def generate_photo_album_pdf(categories: list) -> bytes:
                     meta_text.append(f"📍 {location}")
                 story.append(Paragraph(" | ".join(meta_text), meta_style))
             
-             # Add people in photo
+            # Add people in photo
             if people:
                 story.append(Paragraph(f"👥 <b>People:</b> {people}", caption_style))
+            
             # Add description
             if description:
                 story.append(Paragraph(description, caption_style))
@@ -2664,7 +2688,9 @@ async def generate_photo_album_pdf_endpoint(data: PhotoAlbumInput):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
-        # ============== Client Intake PDF Generation ==============
+
+
+# ============== Client Intake PDF Generation ==============
 
 @app.post("/generate-intake-pdf")
 async def generate_intake_pdf(data: dict):
@@ -2686,6 +2712,7 @@ async def generate_intake_pdf(data: dict):
         story.append(Paragraph(f"Date: {datetime.now().strftime('%B %d, %Y')}", styles['Normal']))
         story.append(Spacer(1, 20))
         
+        # Helper
         def add_section(title, fields):
             story.append(Paragraph(title, section_style))
             rows = []
@@ -2704,7 +2731,7 @@ async def generate_intake_pdf(data: dict):
                 story.append(table)
             story.append(Spacer(1, 10))
         
-        add_section("Personal Information", [
+        add_section("Personal Information / Informacion Personal", [
             ("Full Name", "full_name"),
             ("Date of Birth", "dob"),
             ("Country of Birth", "country_birth"),
@@ -2716,7 +2743,7 @@ async def generate_intake_pdf(data: dict):
             ("Dependents", "dependents"),
         ])
         
-        add_section("Immigration Status", [
+        add_section("Immigration Status / Estado Migratorio", [
             ("Current Status", "current_status"),
             ("Permit Number", "permit_number"),
             ("Date Issued", "date_issued"),
@@ -2726,14 +2753,15 @@ async def generate_intake_pdf(data: dict):
             ("Refusal Details", "refusal_details"),
         ])
         
+        # Services needed
         services = data.get('services_needed', [])
         if services:
-            story.append(Paragraph("Services Needed", section_style))
+            story.append(Paragraph("Services Needed / Servicios Necesarios", section_style))
             for s in services:
                 story.append(Paragraph(f"• {s.replace('_', ' ').title()}", content_style))
             story.append(Spacer(1, 10))
         
-        add_section("Education & Work", [
+        add_section("Education & Work / Educacion y Trabajo", [
             ("Education Level", "education_level"),
             ("Field of Study", "field_of_study"),
             ("Education Country", "edu_country"),
@@ -2746,7 +2774,7 @@ async def generate_intake_pdf(data: dict):
             ("LMIA Status", "lmia_status"),
         ])
         
-        add_section("Language & Other", [
+        add_section("Language & Other / Idioma y Otros", [
             ("English Level", "english_level"),
             ("French Level", "french_level"),
             ("IELTS Score", "ielts_score"),
@@ -2760,6 +2788,7 @@ async def generate_intake_pdf(data: dict):
             ("Notes", "notes"),
         ])
         
+        # Footer
         story.append(Spacer(1, 30))
         footer_style = ParagraphStyle('Footer', parent=styles['Normal'], fontSize=8, textColor=colors.gray, alignment=1)
         story.append(Paragraph("This document is confidential and for immigration consultation purposes only.", footer_style))
@@ -2781,3 +2810,336 @@ async def generate_intake_pdf(data: dict):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
 
+
+# ============== Form Package Auto-Fill (IMM 1344, IMM 0008, IMM 0008 DEP, IMM 5532) ==============
+
+class FormPackageInput(BaseModel):
+    intake_data: dict
+    children: Optional[list] = []
+    sponsorship_data: Optional[dict] = {}
+
+
+def generate_imm1344_pages(story, data, styles, section_style, make_table):
+    """Generate IMM 1344 - Application to Sponsor pages."""
+    story.append(Paragraph("IMM 1344 — Application to Sponsor, Sponsorship Agreement and Undertaking", section_style))
+    story.append(Spacer(1, 10))
+    
+    # Map intake data to IMM 1344 fields
+    full_name = data.get('full_name', '')
+    name_parts = full_name.split() if full_name else []
+    family_name = name_parts[-1].upper() if name_parts else ''
+    given_names = ' '.join(name_parts[:-1]) if len(name_parts) > 1 else ''
+    
+    rows = [
+        ["SECTION A — SPONSOR INFORMATION", ""],
+        ["Family Name:", family_name],
+        ["Given Name(s):", given_names],
+        ["Date of Birth:", data.get('dob', '')],
+        ["Sex:", data.get('gender', '')],
+        ["Country of Birth:", data.get('country_birth', '')],
+        ["Country of Citizenship:", data.get('citizenship', '')],
+        ["Current Immigration Status:", data.get('current_status', '')],
+        ["Marital Status:", data.get('marital_status', '').replace('_', ' ').title()],
+        ["", ""],
+        ["MAILING ADDRESS", ""],
+        ["Address:", data.get('address', '')],
+        ["Phone:", data.get('phone', '')],
+        ["Email:", data.get('email', '')],
+        ["", ""],
+        ["SECTION B — PRINCIPAL APPLICANT (PERSON BEING SPONSORED)", ""],
+        ["Family Name:", data.get('spouse_family_name', '') or data.get('applicant_family_name', '')],
+        ["Given Name(s):", data.get('spouse_given_name', '') or data.get('applicant_given_name', '')],
+        ["Date of Birth:", data.get('spouse_dob', '') or data.get('applicant_dob', '')],
+        ["Country of Birth:", data.get('spouse_country_birth', '') or data.get('applicant_country_birth', '')],
+        ["Country of Citizenship:", data.get('spouse_citizenship', '') or data.get('applicant_citizenship', '')],
+        ["Relationship to Sponsor:", data.get('relationship_type', 'Spouse').replace('_', ' ').title()],
+    ]
+    story.append(make_table(rows))
+    story.append(Spacer(1, 20))
+
+
+def generate_imm0008_pages(story, data, styles, section_style, make_table):
+    """Generate IMM 0008 - Generic Application Form for Canada pages."""
+    story.append(Paragraph("IMM 0008 — Generic Application Form for Canada (Principal Applicant)", section_style))
+    story.append(Spacer(1, 10))
+    
+    # The applicant is the person being sponsored (spouse/partner)
+    rows = [
+        ["SECTION A — PERSONAL DETAILS", ""],
+        ["Family Name:", data.get('spouse_family_name', '') or data.get('applicant_family_name', '')],
+        ["Given Name(s):", data.get('spouse_given_name', '') or data.get('applicant_given_name', '')],
+        ["Date of Birth:", data.get('spouse_dob', '') or data.get('applicant_dob', '')],
+        ["Sex:", data.get('spouse_sex', '') or data.get('applicant_sex', '')],
+        ["Country of Birth:", data.get('spouse_country_birth', '') or data.get('applicant_country_birth', '')],
+        ["Country of Citizenship:", data.get('spouse_citizenship', '') or data.get('applicant_citizenship', '')],
+        ["Current Country of Residence:", data.get('spouse_country_residence', '') or data.get('applicant_country_residence', '')],
+        ["Marital Status:", data.get('spouse_marital_status', 'Married').replace('_', ' ').title()],
+        ["", ""],
+        ["SECTION B — PASSPORT / TRAVEL DOCUMENT", ""],
+        ["Passport Number:", data.get('spouse_passport', '') or data.get('applicant_passport', '') or data.get('permit_number', '')],
+        ["Country of Issue:", data.get('spouse_passport_country', '') or data.get('applicant_passport_country', '')],
+        ["Date of Issue:", data.get('spouse_passport_issued', '') or data.get('date_issued', '')],
+        ["Expiry Date:", data.get('spouse_passport_expiry', '') or data.get('applicant_passport_expiry', '') or data.get('expiry_date', '')],
+        ["", ""],
+        ["SECTION C — CONTACT INFORMATION", ""],
+        ["Current Address:", data.get('spouse_address', '') or data.get('applicant_address', '')],
+        ["Phone:", data.get('spouse_phone', '') or data.get('applicant_phone', '')],
+        ["Email:", data.get('spouse_email', '') or data.get('applicant_email', '')],
+        ["", ""],
+        ["SECTION D — EDUCATION", ""],
+        ["Highest Level:", data.get('education_level', '').replace('_', ' ').title()],
+        ["Field of Study:", data.get('field_of_study', '')],
+        ["Country of Education:", data.get('edu_country', '')],
+        ["", ""],
+        ["SECTION E — LANGUAGE", ""],
+        ["English Proficiency:", data.get('english_level', '').replace('_', ' ').title()],
+        ["French Proficiency:", data.get('french_level', '').replace('_', ' ').title()],
+        ["IELTS/CELPIP Score:", data.get('ielts_score', '')],
+        ["TEF/TCF Score:", data.get('tef_score', '')],
+    ]
+    story.append(make_table(rows))
+    story.append(Spacer(1, 20))
+
+
+def generate_imm0008dep_pages(story, children, styles, section_style, make_table):
+    """Generate IMM 0008 DEP - Additional Dependants/Declaration form for each child."""
+    if not children:
+        return
+    
+    story.append(Paragraph("IMM 0008 DEP — Additional Dependants / Declaration", section_style))
+    story.append(Spacer(1, 10))
+    
+    for i, child in enumerate(children):
+        story.append(Paragraph(f"Dependant {i + 1}", ParagraphStyle('ChildHeader', parent=styles['Heading3'], fontSize=12, spaceBefore=10, spaceAfter=5, textColor=colors.HexColor('#374151'))))
+        
+        rows = [
+            ["Family Name:", child.get('name', '').split()[-1].upper() if child.get('name', '').split() else ''],
+            ["Given Name(s):", ' '.join(child.get('name', '').split()[:-1]) if len(child.get('name', '').split()) > 1 else child.get('name', '')],
+            ["Date of Birth:", child.get('dob', '')],
+            ["Sex:", child.get('gender', '').title()],
+            ["Relationship to PA:", child.get('relationship', '').replace('_', ' ').title()],
+            ["Country of Birth:", child.get('country_birth', '')],
+            ["Country of Citizenship:", child.get('citizenship', '')],
+            ["Passport Number:", child.get('passport_number', '')],
+            ["Passport Expiry:", child.get('passport_expiry', '')],
+            ["Marital Status:", child.get('marital_status', 'Single').replace('_', ' ').title()],
+            ["Accompanying:", child.get('accompanying', 'yes').title()],
+        ]
+        story.append(make_table(rows))
+        story.append(Spacer(1, 15))
+
+
+def generate_imm5532_pages(story, data, styles, section_style, make_table):
+    """Generate IMM 5532 - Relationship Information and Sponsorship Evaluation."""
+    story.append(Paragraph("IMM 5532 — Relationship Information and Sponsorship Evaluation", section_style))
+    story.append(Spacer(1, 10))
+    
+    # Sponsor info
+    full_name = data.get('full_name', '')
+    name_parts = full_name.split() if full_name else []
+    
+    rows = [
+        ["SECTION A — YOU (THE SPONSOR)", ""],
+        ["Family Name:", name_parts[-1].upper() if name_parts else ''],
+        ["Given Name(s):", ' '.join(name_parts[:-1]) if len(name_parts) > 1 else ''],
+        ["Date of Birth:", data.get('dob', '')],
+        ["", ""],
+        ["SECTION B — YOUR SPOUSE/PARTNER", ""],
+        ["Family Name:", data.get('spouse_family_name', '') or data.get('applicant_family_name', '')],
+        ["Given Name(s):", data.get('spouse_given_name', '') or data.get('applicant_given_name', '')],
+        ["Date of Birth:", data.get('spouse_dob', '') or data.get('applicant_dob', '')],
+        ["", ""],
+        ["SECTION C — YOUR RELATIONSHIP", ""],
+        ["How did you meet?:", data.get('how_met', '') or data.get('first_met_location', '')],
+        ["Date you first met:", data.get('first_met_date', '')],
+        ["Date relationship began:", data.get('relationship_start', '')],
+        ["Date of marriage/union:", data.get('marriage_date', '') or data.get('date_married', '')],
+        ["Place of marriage:", data.get('marriage_location', '') or data.get('place_married', '')],
+        ["Currently living together?:", data.get('living_together', '')],
+        ["", ""],
+        ["SECTION D — DEVELOPMENT OF RELATIONSHIP", ""],
+        ["Communication methods:", data.get('communication_methods', 'Phone, Video calls, Text messages')],
+        ["Frequency of communication:", data.get('communication_frequency', '')],
+        ["Number of visits:", data.get('number_of_visits', '')],
+        ["", ""],
+        ["SECTION E — FAMILY INFORMATION", ""],
+        ["Number of dependents:", data.get('dependents', '0')],
+        ["Family in Canada:", data.get('family_in_canada', '')],
+        ["Family details:", data.get('family_details', '')],
+    ]
+    story.append(make_table(rows))
+    story.append(Spacer(1, 20))
+
+
+@app.post("/generate-form-package")
+async def generate_form_package(input_data: FormPackageInput):
+    """Generate a complete IRCC form package PDF with all forms auto-filled from intake data."""
+    if not PDF_SUPPORT:
+        raise HTTPException(status_code=500, detail="PDF support not available. Install reportlab.")
+    
+    try:
+        data = input_data.intake_data
+        children = input_data.children or []
+        sponsorship = input_data.sponsorship_data or {}
+        
+        # Merge sponsorship data into intake data (sponsorship fields take priority)
+        merged = {**data, **sponsorship}
+        
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
+        styles = getSampleStyleSheet()
+        
+        title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=20, spaceAfter=20, textColor=colors.HexColor('#DC2626'))
+        section_style = ParagraphStyle('Section', parent=styles['Heading2'], fontSize=14, spaceBefore=20, spaceAfter=10, textColor=colors.HexColor('#1F2937'))
+        
+        story = []
+        
+        # Cover page
+        story.append(Spacer(1, 100))
+        story.append(Paragraph("🇨🇦 IRCC Form Package", title_style))
+        story.append(Paragraph("Auto-filled from Client Intake Data", styles['Heading3']))
+        story.append(Spacer(1, 30))
+        
+        applicant_name = merged.get('full_name', 'Unknown')
+        story.append(Paragraph(f"<b>Sponsor:</b> {applicant_name}", styles['Normal']))
+        story.append(Paragraph(f"<b>Generated:</b> {datetime.now().strftime('%B %d, %Y at %I:%M %p')}", styles['Normal']))
+        story.append(Spacer(1, 10))
+        
+        forms_included = ["IMM 1344 — Sponsorship Application", "IMM 0008 — Generic Application (Principal Applicant)"]
+        if children:
+            forms_included.append(f"IMM 0008 DEP — Dependants ({len(children)} child{'ren' if len(children) > 1 else ''})")
+        forms_included.append("IMM 5532 — Relationship Information")
+        
+        story.append(Paragraph("<b>Forms Included:</b>", styles['Normal']))
+        for form in forms_included:
+            story.append(Paragraph(f"  • {form}", styles['Normal']))
+        
+        story.append(Spacer(1, 40))
+        story.append(Paragraph("<i>Note: This is a pre-filled summary. Transfer this data to the official IRCC PDF forms available at canada.ca/immigration.</i>", 
+                              ParagraphStyle('Note', parent=styles['Normal'], fontSize=9, textColor=colors.gray)))
+        
+        # Helper for tables
+        def make_table(rows):
+            table = Table(rows, colWidths=[2.5*inch, 4.5*inch])
+            table.setStyle(TableStyle([
+                ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 10),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ('TOPPADDING', (0, 0), (-1, -1), 6),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('LINEBELOW', (0, 0), (-1, -1), 0.5, colors.HexColor('#E5E7EB')),
+            ]))
+            return table
+        
+        # Page break before each form
+        from reportlab.platypus import PageBreak
+        
+        # IMM 1344
+        story.append(PageBreak())
+        generate_imm1344_pages(story, merged, styles, section_style, make_table)
+        
+        # IMM 0008
+        story.append(PageBreak())
+        generate_imm0008_pages(story, merged, styles, section_style, make_table)
+        
+        # IMM 0008 DEP (if children exist)
+        if children:
+            story.append(PageBreak())
+            generate_imm0008dep_pages(story, children, styles, section_style, make_table)
+        
+        # IMM 5532
+        story.append(PageBreak())
+        generate_imm5532_pages(story, merged, styles, section_style, make_table)
+        
+        doc.build(story)
+        
+        name = merged.get('full_name', 'client').replace(' ', '_')
+        return Response(
+            content=buffer.getvalue(),
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename=IRCC_Form_Package_{name}.pdf",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Expose-Headers": "Content-Disposition"
+            }
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Form package generation failed: {str(e)}")
+
+
+# ============== Photo Album Word Document Generation ==============
+
+@app.post("/generate-photo-album-word")
+async def generate_photo_album_word(data: dict):
+    """Generate a Word document for the photo album (editable)."""
+    try:
+        from docx import Document
+        from docx.shared import Inches, Pt
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        
+        doc = Document()
+        
+        # Title
+        title = doc.add_heading('Relationship Photo Album', level=1)
+        title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        doc.add_paragraph(f'Generated: {datetime.now().strftime("%B %d, %Y")}')
+        doc.add_paragraph('Photos showing the genuineness of our relationship, organized by category.')
+        doc.add_paragraph('')
+        
+        categories = data.get('categories', [])
+        
+        for cat in categories:
+            doc.add_heading(cat.get('category', ''), level=2)
+            
+            for i, photo in enumerate(cat.get('photos', [])):
+                # Add photo placeholder
+                p = doc.add_paragraph()
+                p.add_run(f'Photo {i + 1}').bold = True
+                
+                # Add details table
+                table = doc.add_table(rows=4, cols=2)
+                table.style = 'Light Grid Accent 1'
+                
+                fields = [
+                    ('Date:', photo.get('date', '')),
+                    ('Location:', photo.get('location', '')),
+                    ('People:', photo.get('people', '')),
+                    ('Description:', photo.get('description', '')),
+                ]
+                
+                for row_idx, (label, value) in enumerate(fields):
+                    table.rows[row_idx].cells[0].text = label
+                    table.rows[row_idx].cells[1].text = value or '—'
+                
+                doc.add_paragraph('')  # spacing
+        
+        # Tips section
+        doc.add_heading('Tips for IRCC Submission', level=2)
+        doc.add_paragraph('• Include dates on all photos')
+        doc.add_paragraph('• Both partners should be clearly visible')
+        doc.add_paragraph('• Show photos from different time periods')
+        doc.add_paragraph('• Include photos with family members')
+        doc.add_paragraph('• Print photos and write descriptions on the back')
+        
+        # Save to buffer
+        buffer = io.BytesIO()
+        doc.save(buffer)
+        buffer.seek(0)
+        
+        return Response(
+            content=buffer.getvalue(),
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={
+                "Content-Disposition": "attachment; filename=relationship_photo_album.docx",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Expose-Headers": "Content-Disposition"
+            }
+        )
+    except ImportError:
+        raise HTTPException(status_code=500, detail="python-docx not installed. Add 'python-docx' to requirements.txt")
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Word generation failed: {str(e)}")
