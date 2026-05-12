@@ -2190,7 +2190,7 @@ function ProofOfRelationship({ user }) {
         )}
 
         {/* Saved Documents List */}
-        {savedDocs.length > 1 && (
+        {savedDocs.length > 0 && (
           <div className="mb-4 bg-white rounded-lg p-4 border border-pink-100">
             <h4 className="text-sm font-medium text-slate-700 mb-2">📂 My Saved Documents</h4>
             <div className="space-y-2 max-h-40 overflow-y-auto">
@@ -2686,7 +2686,7 @@ function PhotoAlbumOrganizer({ user }) {
         )}
 
         {/* Saved Documents List */}
-        {savedDocs.length > 1 && (
+        {savedDocs.length > 0 && (
           <div className="mb-4 bg-white rounded-lg p-4 border border-purple-100">
             <h4 className="text-sm font-medium text-slate-700 mb-2">📂 My Saved Documents</h4>
             <div className="space-y-2 max-h-40 overflow-y-auto">
