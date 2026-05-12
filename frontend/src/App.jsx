@@ -2008,19 +2008,22 @@ function ProofOfRelationship({ user }) {
   const [loading, setLoading] = useState(false)
   const [savedDocs, setSavedDocs] = useState([])
   const [currentDocName, setCurrentDocName] = useState('')
+  const [currentDocId, setCurrentDocId] = useState(null)
   const [showSaveDialog, setShowSaveDialog] = useState(false)
   const [saveName, setSaveName] = useState('')
 
-  // Load saved documents list
+  // Load saved documents list and auto-load most recent
   useEffect(() => {
     if (!user?.id) return
-    supabase.from('proof_entries').select('id, doc_name, updated_at, entries').eq('user_id', user.id).order('updated_at', { ascending: false }).then(({ data }) => {
-      if (data) setSavedDocs(data.filter(d => d.entries && d.entries.length > 0))
-      // Auto-load most recent with data
-      const withData = data?.filter(d => d.entries && d.entries.length > 0)
-      if (withData && withData.length > 0) {
-        setEntries(withData[0].entries)
-        setCurrentDocName(withData[0].doc_name || 'Untitled')
+    supabase.from('proof_entries').select('*').eq('user_id', user.id).order('updated_at', { ascending: false }).then(({ data }) => {
+      if (data) {
+        const withData = data.filter(d => d.entries && d.entries.length > 0)
+        setSavedDocs(withData)
+        if (withData.length > 0) {
+          setEntries(withData[0].entries)
+          setCurrentDocName(withData[0].doc_name || 'Untitled')
+          setCurrentDocId(withData[0].id)
+        }
       }
     })
   }, [user?.id])
@@ -2029,12 +2032,12 @@ function ProofOfRelationship({ user }) {
   useEffect(() => {
     if (!user?.id || entries.length === 0) return
     const timer = setTimeout(async () => {
-      const { data: existing } = await supabase.from('proof_entries').select('id').eq('user_id', user.id).eq('doc_name', currentDocName || 'Untitled').limit(1)
       const payload = { user_id: user.id, entries, doc_name: currentDocName || 'Untitled', updated_at: new Date().toISOString() }
-      if (existing && existing.length > 0) {
-        await supabase.from('proof_entries').update(payload).eq('id', existing[0].id)
+      if (currentDocId) {
+        await supabase.from('proof_entries').update(payload).eq('id', currentDocId)
       } else {
-        await supabase.from('proof_entries').insert(payload)
+        const { data } = await supabase.from('proof_entries').insert(payload).select('id')
+        if (data && data[0]) setCurrentDocId(data[0].id)
       }
     }, 2000)
     return () => clearTimeout(timer)
@@ -2044,11 +2047,12 @@ function ProofOfRelationship({ user }) {
   const saveAsComm = async () => {
     if (!saveName.trim() || !user?.id || entries.length === 0) return
     const payload = { user_id: user.id, entries, doc_name: saveName.trim(), updated_at: new Date().toISOString() }
-    await supabase.from('proof_entries').insert(payload)
+    const { data: inserted } = await supabase.from('proof_entries').insert(payload).select('id')
+    if (inserted && inserted[0]) setCurrentDocId(inserted[0].id)
     setCurrentDocName(saveName.trim())
     setShowSaveDialog(false)
     setSaveName('')
-    const { data } = await supabase.from('proof_entries').select('id, doc_name, updated_at, entries').eq('user_id', user.id).order('updated_at', { ascending: false })
+    const { data } = await supabase.from('proof_entries').select('*').eq('user_id', user.id).order('updated_at', { ascending: false })
     if (data) setSavedDocs(data.filter(d => d.entries && d.entries.length > 0))
     alert('Saved as "' + saveName.trim() + '"')
   }
@@ -2059,6 +2063,7 @@ function ProofOfRelationship({ user }) {
     if (data && data.entries && data.entries.length > 0) {
       setEntries(data.entries)
       setCurrentDocName(data.doc_name || 'Untitled')
+      setCurrentDocId(data.id)
     } else {
       alert('This document has no entries.')
     }
@@ -2068,8 +2073,13 @@ function ProofOfRelationship({ user }) {
   const deleteDocumentComm = async (docId) => {
     if (!confirm('Delete this saved document?')) return
     await supabase.from('proof_entries').delete().eq('id', docId)
-    const { data } = await supabase.from('proof_entries').select('id, doc_name, updated_at, entries').eq('user_id', user.id).order('updated_at', { ascending: false })
+    const { data } = await supabase.from('proof_entries').select('*').eq('user_id', user.id).order('updated_at', { ascending: false })
     if (data) setSavedDocs(data.filter(d => d.entries && d.entries.length > 0))
+    if (docId === currentDocId) {
+      setCurrentDocId(null)
+      setEntries([])
+      setCurrentDocName('')
+    }
   }
 
   const entryTypes = [
