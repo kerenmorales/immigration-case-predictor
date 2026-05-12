@@ -2009,7 +2009,7 @@ function ProofOfRelationship({ user }) {
 
   // Auto-save: Load entries from Supabase on mount
   useEffect(() => {
-    if (!user?.id || user.id === 'admin') return
+    if (!user?.id) return
     supabase.from('proof_entries').select('*').eq('user_id', user.id).order('updated_at', { ascending: false }).limit(1).then(({ data }) => {
       if (data && data.length > 0 && data[0].entries) {
         setEntries(data[0].entries)
@@ -2019,7 +2019,7 @@ function ProofOfRelationship({ user }) {
 
   // Auto-save: Save entries to Supabase when they change
   useEffect(() => {
-    if (!user?.id || user.id === 'admin' || entries.length === 0) return
+    if (!user?.id || entries.length === 0) return
     const timer = setTimeout(async () => {
       const { data: existing } = await supabase.from('proof_entries').select('id').eq('user_id', user.id).limit(1)
       const payload = { user_id: user.id, entries, updated_at: new Date().toISOString() }
@@ -2138,6 +2138,48 @@ function ProofOfRelationship({ user }) {
               style={{ width: `${pageProgress}%` }}
             />
           </div>
+        </div>
+      </div>
+
+      {/* Upload/Download saved file */}
+      <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <div className="flex flex-wrap gap-3 items-center">
+          <span className="text-sm font-medium text-slate-700">My Saved Copy:</span>
+          <label className="inline-flex items-center gap-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg cursor-pointer transition-colors">
+            📤 Upload PDF/Word
+            <input type="file" accept=".pdf,.docx" className="hidden" onChange={async (e) => {
+              const file = e.target.files?.[0]
+              if (!file || !user?.id) return
+              const filePath = `${user.id}/comm_evidence_${Date.now()}.${file.name.split('.').pop()}`
+              const { error } = await supabase.storage.from('form-uploads').upload(filePath, file, { upsert: true })
+              if (error) { alert('Upload failed: ' + error.message); return }
+              setEntries(prev => [...prev, { id: '_savedFile', type: '_file', filePath, fileName: file.name, uploadedAt: new Date().toISOString() }])
+              alert('File saved!')
+              e.target.value = ''
+            }} />
+          </label>
+          {entries.find(e => e.id === '_savedFile') && (
+            <>
+              <button
+                onClick={async () => {
+                  const saved = entries.find(e => e.id === '_savedFile')
+                  if (!saved) return
+                  const { data, error } = await supabase.storage.from('form-uploads').download(saved.filePath)
+                  if (error) { alert('Download failed: ' + error.message); return }
+                  const url = window.URL.createObjectURL(data)
+                  const a = document.createElement('a')
+                  a.href = url
+                  a.download = saved.fileName
+                  a.click()
+                  window.URL.revokeObjectURL(url)
+                }}
+                className="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white text-sm font-medium rounded-lg transition-colors"
+              >
+                💾 Download My Copy
+              </button>
+              <span className="text-xs text-pink-600">📎 {entries.find(e => e.id === '_savedFile')?.fileName}</span>
+            </>
+          )}
         </div>
       </div>
 
@@ -2336,7 +2378,7 @@ function PhotoAlbumOrganizer({ user }) {
 
   // Auto-save: Load photos from Supabase on mount
   useEffect(() => {
-    if (!user?.id || user.id === 'admin') return
+    if (!user?.id) return
     supabase.from('photo_album_data').select('*').eq('user_id', user.id).order('updated_at', { ascending: false }).limit(1).then(({ data }) => {
       if (data && data.length > 0 && data[0].photos) {
         setPhotos(data[0].photos)
@@ -2346,7 +2388,7 @@ function PhotoAlbumOrganizer({ user }) {
 
   // Auto-save: Save photos to Supabase when they change
   useEffect(() => {
-    if (!user?.id || user.id === 'admin' || Object.keys(photos).length === 0) return
+    if (!user?.id || Object.keys(photos).length === 0) return
     const timer = setTimeout(async () => {
       const { data: existing } = await supabase.from('photo_album_data').select('id').eq('user_id', user.id).limit(1)
       const payload = { user_id: user.id, photos, updated_at: new Date().toISOString() }
@@ -2511,14 +2553,90 @@ function PhotoAlbumOrganizer({ user }) {
         </div>
 
         {filledSlots > 0 && (
-          <button
-            onClick={downloadPDF}
-            disabled={loading}
-            className="px-6 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium disabled:bg-slate-300 disabled:cursor-not-allowed"
-          >
-            {loading ? 'Generating PDF...' : '📥 Download Photo Album PDF'}
-          </button>
+          <div className="flex gap-3 flex-wrap">
+            <button
+              onClick={downloadPDF}
+              disabled={loading}
+              className="px-6 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium disabled:bg-slate-300 disabled:cursor-not-allowed"
+            >
+              {loading ? 'Generating PDF...' : '📥 Download Photo Album PDF'}
+            </button>
+            <button
+              onClick={async () => {
+                setLoading(true)
+                try {
+                  const photoData = categories.map(cat => ({
+                    category: cat.title,
+                    photos: Array.from({ length: cat.slots }, (_, i) => {
+                      const key = `${cat.id}_${i}`
+                      const photo = photos[key]
+                      return photo ? { date: photo.date || '', location: photo.location || '', people: photo.people || '', description: photo.description || '' } : null
+                    }).filter(Boolean)
+                  })).filter(cat => cat.photos.length > 0)
+                  const response = await fetch(`${API_URL}/generate-photo-album-word`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ categories: photoData })
+                  })
+                  if (!response.ok) throw new Error('Failed to generate Word doc')
+                  const blob = await response.blob()
+                  const url = window.URL.createObjectURL(blob)
+                  const a = document.createElement('a')
+                  a.href = url
+                  a.download = 'relationship_photo_album.docx'
+                  a.click()
+                  window.URL.revokeObjectURL(url)
+                } catch (err) {
+                  console.error(err)
+                  alert('Failed to generate Word document. Please try again.')
+                } finally {
+                  setLoading(false)
+                }
+              }}
+              disabled={loading}
+              className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium disabled:bg-slate-300 disabled:cursor-not-allowed"
+            >
+              {loading ? 'Generating...' : '📄 Download as Word (.docx)'}
+            </button>
+          </div>
         )}
+
+        {/* Upload/Download saved PDF */}
+        <div className="flex flex-wrap gap-3 items-center mt-3 pt-3 border-t border-purple-100">
+          <label className="inline-flex items-center gap-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg cursor-pointer transition-colors">
+            📤 Upload My Completed PDF
+            <input type="file" accept=".pdf,.docx" className="hidden" onChange={async (e) => {
+              const file = e.target.files?.[0]
+              if (!file || !user?.id) return
+              const filePath = `${user.id}/photo_album_${Date.now()}.${file.name.split('.').pop()}`
+              const { error } = await supabase.storage.from('form-uploads').upload(filePath, file, { upsert: true })
+              if (error) { alert('Upload failed: ' + error.message); return }
+              setPhotos(prev => ({ ...prev, _savedFile: { filePath, fileName: file.name, uploadedAt: new Date().toISOString() } }))
+              alert('File saved! You can download it anytime.')
+              e.target.value = ''
+            }} />
+          </label>
+          {photos._savedFile && (
+            <>
+              <button
+                onClick={async () => {
+                  const { data, error } = await supabase.storage.from('form-uploads').download(photos._savedFile.filePath)
+                  if (error) { alert('Download failed: ' + error.message); return }
+                  const url = window.URL.createObjectURL(data)
+                  const a = document.createElement('a')
+                  a.href = url
+                  a.download = photos._savedFile.fileName
+                  a.click()
+                  window.URL.revokeObjectURL(url)
+                }}
+                className="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white text-sm font-medium rounded-lg transition-colors"
+              >
+                💾 Download My Saved Copy
+              </button>
+              <span className="text-xs text-purple-600">📎 {photos._savedFile.fileName} — saved {new Date(photos._savedFile.uploadedAt).toLocaleDateString()}</span>
+            </>
+          )}
+        </div>
       </div>
 
       {categories.map((category) => (
@@ -2872,7 +2990,7 @@ function FormPackageGenerator({ user, formData }) {
 
   // Load saved tracker from Supabase
   useEffect(() => {
-    if (!user?.id || user.id === 'admin') { setLoading(false); return }
+    if (!user?.id) { setLoading(false); return }
     supabase.from('form_tracker').select('*').eq('user_id', user.id).order('updated_at', { ascending: false }).limit(1).then(({ data: rows }) => {
       if (rows && rows.length > 0 && rows[0].tracker_data) {
         setFormTracker(rows[0].tracker_data)
@@ -2884,7 +3002,7 @@ function FormPackageGenerator({ user, formData }) {
 
   // Auto-save tracker to Supabase
   const saveTracker = async (newTracker, pkgId) => {
-    if (!user?.id || user.id === 'admin') return
+    if (!user?.id) return
     const payload = { user_id: user.id, tracker_data: { ...newTracker, selectedPackage: pkgId || selectedPackage }, updated_at: new Date().toISOString() }
     const { data: existing } = await supabase.from('form_tracker').select('id').eq('user_id', user.id).limit(1)
     if (existing && existing.length > 0) {
@@ -2908,7 +3026,7 @@ function FormPackageGenerator({ user, formData }) {
 
   // Upload a filled PDF for a form
   const uploadFormPDF = async (formId, file) => {
-    if (!user?.id || user.id === 'admin' || !file) return
+    if (!user?.id || !file) return
     const filePath = `${user.id}/${formId}_${Date.now()}.pdf`
     const { error } = await supabase.storage.from('form-uploads').upload(filePath, file, { upsert: true })
     if (error) { alert('Upload failed: ' + error.message); return }
