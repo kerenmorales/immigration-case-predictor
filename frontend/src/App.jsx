@@ -6,8 +6,8 @@ const API_URL = import.meta.env.VITE_API_URL ||
     ? 'https://immigration-case-predictor-production.up.railway.app' 
     : 'http://localhost:8000')
 
-// Compress image to max 800px width and 0.6 quality JPEG to reduce storage size
-const compressImage = (dataUrl, maxWidth = 800, quality = 0.6) => {
+// Compress image to max 500px width and 0.4 quality JPEG to reduce storage size
+const compressImage = (dataUrl, maxWidth = 500, quality = 0.4) => {
   return new Promise((resolve) => {
     const img = new Image()
     img.onload = () => {
@@ -2050,38 +2050,81 @@ function ProofOfRelationship({ user }) {
     })
   }, [user?.id])
 
-  // Manual Save
+  // Manual Save — stores images in Storage, metadata in DB
   const saveCurrentDocComm = async () => {
     if (!user?.id || entries.length === 0) return
-    const payload = { user_id: user.id, entries, doc_name: currentDocName || 'Untitled', updated_at: new Date().toISOString() }
-    if (currentDocId) {
-      await supabase.from('proof_entries').update(payload).eq('id', currentDocId)
-    } else {
-      const { data } = await supabase.from('proof_entries').insert(payload).select('id')
-      if (data && data[0]) setCurrentDocId(data[0].id)
+    try {
+      // Upload images to storage, keep only paths in DB
+      const entriesForDb = await Promise.all(entries.map(async (entry, idx) => {
+        if (entry.image && entry.image.startsWith('data:')) {
+          // Upload to storage
+          const blob = await fetch(entry.image).then(r => r.blob())
+          const filePath = `${user.id}/proof_${currentDocId || 'new'}_${idx}_${Date.now()}.jpg`
+          await supabase.storage.from('form-uploads').upload(filePath, blob, { upsert: true, contentType: 'image/jpeg' })
+          return { ...entry, image: null, imagePath: filePath }
+        }
+        return entry
+      }))
+      const payload = { user_id: user.id, entries: entriesForDb, doc_name: currentDocName || 'Untitled', updated_at: new Date().toISOString() }
+      if (currentDocId) {
+        await supabase.from('proof_entries').update(payload).eq('id', currentDocId)
+      } else {
+        const { data } = await supabase.from('proof_entries').insert(payload).select('id')
+        if (data && data[0]) setCurrentDocId(data[0].id)
+      }
+      alert('Saved!')
+    } catch (e) {
+      console.error('Save error:', e)
+      alert('Save failed: ' + e.message)
     }
-    alert('Saved!')
   }
 
   // Save As
   const saveAsComm = async () => {
     if (!saveName.trim() || !user?.id || entries.length === 0) return
-    const payload = { user_id: user.id, entries, doc_name: saveName.trim(), updated_at: new Date().toISOString() }
-    const { data: inserted } = await supabase.from('proof_entries').insert(payload).select('id')
-    if (inserted && inserted[0]) setCurrentDocId(inserted[0].id)
-    setCurrentDocName(saveName.trim())
-    setShowSaveDialog(false)
-    setSaveName('')
-    const { data } = await supabase.from('proof_entries').select('*').eq('user_id', user.id).order('updated_at', { ascending: false })
-    if (data) setSavedDocs(data.filter(d => d.entries && d.entries.length > 0))
-    alert('Saved as "' + saveName.trim() + '"')
+    try {
+      const entriesForDb = await Promise.all(entries.map(async (entry, idx) => {
+        if (entry.image && entry.image.startsWith('data:')) {
+          const blob = await fetch(entry.image).then(r => r.blob())
+          const filePath = `${user.id}/proof_new_${idx}_${Date.now()}.jpg`
+          await supabase.storage.from('form-uploads').upload(filePath, blob, { upsert: true, contentType: 'image/jpeg' })
+          return { ...entry, image: null, imagePath: filePath }
+        }
+        return entry
+      }))
+      const payload = { user_id: user.id, entries: entriesForDb, doc_name: saveName.trim(), updated_at: new Date().toISOString() }
+      const { data: inserted } = await supabase.from('proof_entries').insert(payload).select('id')
+      if (inserted && inserted[0]) setCurrentDocId(inserted[0].id)
+      setCurrentDocName(saveName.trim())
+      setShowSaveDialog(false)
+      setSaveName('')
+      const { data } = await supabase.from('proof_entries').select('*').eq('user_id', user.id).order('updated_at', { ascending: false })
+      if (data) setSavedDocs(data.filter(d => d.entries && d.entries.length > 0))
+      alert('Saved as "' + saveName.trim() + '"')
+    } catch (e) {
+      console.error('Save error:', e)
+      alert('Save failed: ' + e.message)
+    }
   }
 
-  // Load a saved document
+  // Load a saved document — downloads images from storage
   const loadDocumentComm = async (docId) => {
     const { data } = await supabase.from('proof_entries').select('*').eq('id', docId).single()
     if (data && data.entries && data.entries.length > 0) {
-      setEntries(data.entries)
+      // Restore images from storage
+      const restored = await Promise.all(data.entries.map(async (entry) => {
+        if (entry.imagePath && !entry.image) {
+          try {
+            const { data: blob } = await supabase.storage.from('form-uploads').download(entry.imagePath)
+            if (blob) {
+              const url = URL.createObjectURL(blob)
+              return { ...entry, image: url }
+            }
+          } catch (e) { console.error('Image load error:', e) }
+        }
+        return entry
+      }))
+      setEntries(restored)
       setCurrentDocName(data.doc_name || 'Untitled')
       setCurrentDocId(data.id)
     } else {
