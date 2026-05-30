@@ -2231,10 +2231,38 @@ function ProofOfRelationship({ user }) {
   const downloadPDF = async () => {
     setLoading(true)
     try {
+      // Convert blob URLs back to base64 for the backend
+      const entriesWithImages = await Promise.all(entries.map(async (entry) => {
+        if (entry.image && entry.image.startsWith('blob:')) {
+          try {
+            const resp = await fetch(entry.image)
+            const blob = await resp.blob()
+            return new Promise((resolve) => {
+              const reader = new FileReader()
+              reader.onload = () => resolve({ ...entry, image: reader.result })
+              reader.readAsDataURL(blob)
+            })
+          } catch (e) { return entry }
+        }
+        if (entry.imagePath && !entry.image) {
+          try {
+            const { data: blob } = await supabase.storage.from('form-uploads').download(entry.imagePath)
+            if (blob) {
+              return new Promise((resolve) => {
+                const reader = new FileReader()
+                reader.onload = () => resolve({ ...entry, image: reader.result })
+                reader.readAsDataURL(blob)
+              })
+            }
+          } catch (e) { /* skip */ }
+        }
+        return entry
+      }))
+
       const response = await fetch(`${API_URL}/generate-proof-pdf`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entries })
+        body: JSON.stringify({ entries: entriesWithImages })
       })
       if (!response.ok) throw new Error('Failed to generate PDF')
       const blob = await response.blob()
@@ -2245,7 +2273,6 @@ function ProofOfRelationship({ user }) {
       a.click()
       window.URL.revokeObjectURL(url)
       
-      // Track PDF download
       trackEvent('pdf_download', user?.id, user?.email, {
         type: 'proof_of_relationship',
         entries_count: entries.length
