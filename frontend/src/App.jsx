@@ -2037,12 +2037,22 @@ function ProofOfRelationship({ user }) {
   // Load saved documents list on mount
   useEffect(() => {
     if (!user?.id) return
-    supabase.from('proof_entries').select('*').eq('user_id', user.id).order('updated_at', { ascending: false }).then(({ data }) => {
+    supabase.from('proof_entries').select('*').eq('user_id', user.id).order('updated_at', { ascending: false }).then(async ({ data }) => {
       if (data) {
         const withData = data.filter(d => d.entries && d.entries.length > 0)
         setSavedDocs(withData)
         if (withData.length > 0) {
-          setEntries(withData[0].entries)
+          // Restore images from storage
+          const restored = await Promise.all(withData[0].entries.map(async (entry) => {
+            if (entry.imagePath && !entry.image) {
+              try {
+                const { data: blob } = await supabase.storage.from('form-uploads').download(entry.imagePath)
+                if (blob) return { ...entry, image: URL.createObjectURL(blob) }
+              } catch (e) { /* skip failed images */ }
+            }
+            return entry
+          }))
+          setEntries(restored)
           setCurrentDocName(withData[0].doc_name || 'Untitled')
           setCurrentDocId(withData[0].id)
         }
@@ -2212,9 +2222,10 @@ function ProofOfRelationship({ user }) {
     setNewEntry(prev => ({ ...prev, image: null }))
   }
 
-  // Estimate pages (roughly 3000 characters per page)
-  const totalChars = entries.reduce((acc, e) => acc + e.content.length + (e.description?.length || 0) + 100, 0)
-  const estimatedPages = Math.max(1, Math.ceil(totalChars / 3000))
+  // Estimate pages (images count as ~1 page each, text ~3000 chars per page)
+  const textChars = entries.reduce((acc, e) => acc + (e.content?.length || 0) + (e.description?.length || 0) + 100, 0)
+  const imageCount = entries.filter(e => e.image || e.imagePath).length
+  const estimatedPages = Math.max(1, Math.ceil(textChars / 3000) + Math.ceil(imageCount / 2))
   const pageProgress = Math.min(100, (estimatedPages / 10) * 100)
 
   const downloadPDF = async () => {
@@ -2506,8 +2517,10 @@ function ProofOfRelationship({ user }) {
                       {entry.description && (
                         <p className="text-sm text-slate-600 italic mb-2">{entry.description}</p>
                       )}
-                      {entry.image && (
-                        <img src={entry.image} alt="Screenshot" className="max-h-48 rounded-lg border border-slate-200 mb-2" />
+                      {(entry.image || entry.imagePath) && (
+                        entry.image 
+                          ? <img src={entry.image} alt="Screenshot" className="max-h-48 rounded-lg border border-slate-200 mb-2" />
+                          : <div className="max-h-48 w-32 bg-slate-100 rounded-lg border border-slate-200 mb-2 flex items-center justify-center text-slate-400 text-xs">📷 Loading...</div>
                       )}
                       {entry.content && (
                         <p className="text-sm text-slate-700 whitespace-pre-wrap bg-slate-50 p-3 rounded-lg">
