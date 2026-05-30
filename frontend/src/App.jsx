@@ -2042,23 +2042,14 @@ function ProofOfRelationship({ user }) {
         const withData = data.filter(d => d.entries && d.entries.length > 0)
         setSavedDocs(withData)
         if (withData.length > 0) {
-          // Restore images from storage as base64
-          const restored = await Promise.all(withData[0].entries.map(async (entry) => {
+          // Restore images using public URLs (bucket is public)
+          const restored = withData[0].entries.map((entry) => {
             if (entry.imagePath && !entry.image) {
-              try {
-                const { data: blob } = await supabase.storage.from('form-uploads').download(entry.imagePath)
-                if (blob) {
-                  const base64 = await new Promise((resolve) => {
-                    const reader = new FileReader()
-                    reader.onload = () => resolve(reader.result)
-                    reader.readAsDataURL(blob)
-                  })
-                  return { ...entry, image: base64 }
-                }
-              } catch (e) { /* skip failed images */ }
+              const publicUrl = `https://iiahbmzrrtgbsmxqifja.supabase.co/storage/v1/object/public/form-uploads/${entry.imagePath}`
+              return { ...entry, image: publicUrl }
             }
             return entry
-          }))
+          })
           setEntries(restored)
           setCurrentDocName(withData[0].doc_name || 'Untitled')
           setCurrentDocId(withData[0].id)
@@ -2124,26 +2115,17 @@ function ProofOfRelationship({ user }) {
     }
   }
 
-  // Load a saved document — downloads images from storage as base64
+  // Load a saved document — uses public URLs for images
   const loadDocumentComm = async (docId) => {
     const { data } = await supabase.from('proof_entries').select('*').eq('id', docId).single()
     if (data && data.entries && data.entries.length > 0) {
-      const restored = await Promise.all(data.entries.map(async (entry) => {
+      const restored = data.entries.map((entry) => {
         if (entry.imagePath && !entry.image) {
-          try {
-            const { data: blob } = await supabase.storage.from('form-uploads').download(entry.imagePath)
-            if (blob) {
-              const base64 = await new Promise((resolve) => {
-                const reader = new FileReader()
-                reader.onload = () => resolve(reader.result)
-                reader.readAsDataURL(blob)
-              })
-              return { ...entry, image: base64 }
-            }
-          } catch (e) { console.error('Image load error:', e) }
+          const publicUrl = `https://iiahbmzrrtgbsmxqifja.supabase.co/storage/v1/object/public/form-uploads/${entry.imagePath}`
+          return { ...entry, image: publicUrl }
         }
         return entry
-      }))
+      })
       setEntries(restored)
       setCurrentDocName(data.doc_name || 'Untitled')
       setCurrentDocId(data.id)
