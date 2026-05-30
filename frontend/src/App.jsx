@@ -2118,6 +2118,25 @@ function ProofOfRelationship({ user }) {
     setEntries(prev => prev.filter(e => e.id !== id))
   }
 
+  const [editingId, setEditingId] = useState(null)
+  const [editData, setEditData] = useState({})
+
+  const startEdit = (entry) => {
+    setEditingId(entry.id)
+    setEditData({ type: entry.type, date: entry.date, content: entry.content, description: entry.description })
+  }
+
+  const saveEdit = () => {
+    setEntries(prev => prev.map(e => e.id === editingId ? { ...e, ...editData } : e))
+    setEditingId(null)
+    setEditData({})
+  }
+
+  const cancelEdit = () => {
+    setEditingId(null)
+    setEditData({})
+  }
+
   const handleImageUpload = (e) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -2410,31 +2429,49 @@ function ProofOfRelationship({ user }) {
           <div className="divide-y divide-slate-100">
             {entries.map((entry) => {
               const typeInfo = entryTypes.find(t => t.value === entry.type)
+              const isEditing = editingId === entry.id
               return (
                 <div key={entry.id} className="p-4 hover:bg-slate-50">
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xl">{typeInfo?.icon}</span>
-                      <span className="font-medium text-slate-800">{typeInfo?.label}</span>
-                      <span className="text-sm text-slate-500">{entry.date}</span>
+                  {isEditing ? (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <select value={editData.type} onChange={(e) => setEditData(prev => ({ ...prev, type: e.target.value }))} className="border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                          {entryTypes.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                        </select>
+                        <input type="date" value={editData.date} onChange={(e) => setEditData(prev => ({ ...prev, date: e.target.value }))} className="border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                      </div>
+                      <input type="text" value={editData.description || ''} onChange={(e) => setEditData(prev => ({ ...prev, description: e.target.value }))} placeholder="Description/context" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                      <textarea value={editData.content || ''} onChange={(e) => setEditData(prev => ({ ...prev, content: e.target.value }))} rows={3} placeholder="Content" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm resize-none" />
+                      <div className="flex gap-2">
+                        <button onClick={saveEdit} className="px-4 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg">Save</button>
+                        <button onClick={cancelEdit} className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-600 text-sm rounded-lg">Cancel</button>
+                      </div>
                     </div>
-                    <button
-                      onClick={() => removeEntry(entry.id)}
-                      className="text-red-500 hover:text-red-700 text-sm"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                  {entry.description && (
-                    <p className="text-sm text-slate-600 italic mb-2">{entry.description}</p>
-                  )}
-                  {entry.image && (
-                    <img src={entry.image} alt="Screenshot" className="max-h-48 rounded-lg border border-slate-200 mb-2" />
-                  )}
-                  {entry.content && (
-                    <p className="text-sm text-slate-700 whitespace-pre-wrap bg-slate-50 p-3 rounded-lg">
-                      {entry.content.length > 300 ? entry.content.substring(0, 300) + '...' : entry.content}
-                    </p>
+                  ) : (
+                    <>
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xl">{typeInfo?.icon}</span>
+                          <span className="font-medium text-slate-800">{typeInfo?.label}</span>
+                          <span className="text-sm text-slate-500">{entry.date}</span>
+                        </div>
+                        <div className="flex gap-3">
+                          <button onClick={() => startEdit(entry)} className="text-blue-500 hover:text-blue-700 text-sm">Edit</button>
+                          <button onClick={() => removeEntry(entry.id)} className="text-red-500 hover:text-red-700 text-sm">Remove</button>
+                        </div>
+                      </div>
+                      {entry.description && (
+                        <p className="text-sm text-slate-600 italic mb-2">{entry.description}</p>
+                      )}
+                      {entry.image && (
+                        <img src={entry.image} alt="Screenshot" className="max-h-48 rounded-lg border border-slate-200 mb-2" />
+                      )}
+                      {entry.content && (
+                        <p className="text-sm text-slate-700 whitespace-pre-wrap bg-slate-50 p-3 rounded-lg">
+                          {entry.content.length > 300 ? entry.content.substring(0, 300) + '...' : entry.content}
+                        </p>
+                      )}
+                    </>
                   )}
                 </div>
               )
