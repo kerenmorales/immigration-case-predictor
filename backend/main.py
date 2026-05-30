@@ -2428,8 +2428,9 @@ def generate_proof_pdf(entries: list) -> bytes:
             content_text = entry_content.replace('\n', '<br/>')
             entry_elements.append(Paragraph(content_text, content_style))
         
-        # Keep title + image together on same page
-        story.append(KeepTogether(entry_elements))
+        # Add entry elements to story
+        for el in entry_elements:
+            story.append(el)
         
         # Thin separator
         if i < len(sorted_entries):
