@@ -2355,7 +2355,6 @@ def generate_proof_pdf(entries: list) -> bytes:
     story.append(Paragraph("Proof of Relationship", title_style))
     story.append(Paragraph("Communication Evidence for Spousal Sponsorship Application", subtitle_style))
     story.append(Paragraph(f"Generated: {datetime.now().strftime('%B %d, %Y')} | Total Entries: {len(entries)}", meta_style))
-    story.append(Spacer(1, 15))
     
     # Type labels
     type_labels = {
@@ -2412,10 +2411,10 @@ def generate_proof_pdf(entries: list) -> bytes:
                 pil_img.save(img_buffer, format='JPEG', quality=85)
                 img_buffer.seek(0)
                 
-                # Fill page width, limit height
+                # Fill page width, limit height to fit with title
                 img_width, img_height = pil_img.size
                 max_width = 7 * inch
-                max_height = 8 * inch
+                max_height = 7 * inch
                 scale = min(max_width / img_width, max_height / img_height)
                 
                 img_flowable = RLImage(img_buffer, width=img_width * scale, height=img_height * scale)
