@@ -2044,7 +2044,7 @@ function ProofOfRelationship({ user }) {
         if (withData.length > 0) {
           // Restore images using public URLs (bucket is public)
           const restored = withData[0].entries.map((entry) => {
-            if (entry.imagePath && !entry.image) {
+            if (entry.imagePath) {
               const publicUrl = `https://iiahbmzrrtgbsmxqifja.supabase.co/storage/v1/object/public/form-uploads/${entry.imagePath}`
               return { ...entry, image: publicUrl }
             }
@@ -2120,7 +2120,7 @@ function ProofOfRelationship({ user }) {
     const { data } = await supabase.from('proof_entries').select('*').eq('id', docId).single()
     if (data && data.entries && data.entries.length > 0) {
       const restored = data.entries.map((entry) => {
-        if (entry.imagePath && !entry.image) {
+        if (entry.imagePath) {
           const publicUrl = `https://iiahbmzrrtgbsmxqifja.supabase.co/storage/v1/object/public/form-uploads/${entry.imagePath}`
           return { ...entry, image: publicUrl }
         }
@@ -2236,7 +2236,7 @@ function ProofOfRelationship({ user }) {
             })
           } catch (e) { return entry }
         }
-        if (entry.imagePath && !entry.image) {
+        if (entry.imagePath) {
           try {
             const { data: blob } = await supabase.storage.from('form-uploads').download(entry.imagePath)
             if (blob) {
