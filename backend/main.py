@@ -2301,10 +2301,10 @@ def generate_proof_pdf(entries: list) -> bytes:
     doc = SimpleDocTemplate(
         buffer, 
         pagesize=letter, 
-        topMargin=0.75*inch, 
-        bottomMargin=0.75*inch,
-        leftMargin=0.75*inch,
-        rightMargin=0.75*inch
+        topMargin=0.5*inch, 
+        bottomMargin=0.5*inch,
+        leftMargin=0.5*inch,
+        rightMargin=0.5*inch
     )
     styles = getSampleStyleSheet()
     
@@ -2312,62 +2312,60 @@ def generate_proof_pdf(entries: list) -> bytes:
     title_style = ParagraphStyle(
         'Title', 
         parent=styles['Heading1'], 
-        fontSize=20, 
-        spaceAfter=20, 
+        fontSize=18, 
+        spaceAfter=10, 
         textColor=colors.HexColor('#1F2937'),
-        alignment=1  # Center
+        alignment=1
     )
     subtitle_style = ParagraphStyle(
         'Subtitle',
         parent=styles['Normal'],
-        fontSize=12,
+        fontSize=11,
         textColor=colors.HexColor('#6B7280'),
         alignment=1,
-        spaceAfter=30
+        spaceAfter=20
     )
     section_style = ParagraphStyle(
         'Section', 
         parent=styles['Heading2'], 
-        fontSize=12, 
-        spaceBefore=15, 
-        spaceAfter=8, 
+        fontSize=11, 
+        spaceBefore=8, 
+        spaceAfter=4, 
         textColor=colors.HexColor('#374151'),
-        borderPadding=5
     )
     content_style = ParagraphStyle(
         'Content',
         parent=styles['Normal'],
         fontSize=10,
-        leading=14,
+        leading=13,
         textColor=colors.HexColor('#1F2937'),
-        spaceAfter=10
+        spaceAfter=4
     )
     meta_style = ParagraphStyle(
         'Meta',
         parent=styles['Normal'],
         fontSize=9,
         textColor=colors.HexColor('#6B7280'),
-        spaceAfter=5
+        spaceAfter=3
     )
     
     story = []
     
-    # Title page
+    # Title
     story.append(Paragraph("Proof of Relationship", title_style))
     story.append(Paragraph("Communication Evidence for Spousal Sponsorship Application", subtitle_style))
-    story.append(Paragraph(f"Generated: {datetime.now().strftime('%B %d, %Y')}", meta_style))
-    story.append(Paragraph(f"Total Entries: {len(entries)}", meta_style))
-    story.append(Spacer(1, 30))
+    story.append(Paragraph(f"Generated: {datetime.now().strftime('%B %d, %Y')} | Total Entries: {len(entries)}", meta_style))
+    story.append(Spacer(1, 15))
     
     # Type labels
     type_labels = {
-        'text_message': '💬 Text Message',
-        'email': '📧 Email',
-        'social_media': '📱 Social Media',
-        'letter': '✉️ Letter',
-        'call_log': '📞 Call Log',
-        'photo': '📷 Photo Description',
-        'other': '📄 Other'
+        'text_message': 'Text Message',
+        'email': 'Email',
+        'social_media': 'Social Media',
+        'letter': 'Letter',
+        'call_log': 'Call Log',
+        'photo': 'Photo',
+        'other': 'Other'
     }
     
     # Sort entries by date
@@ -2380,23 +2378,21 @@ def generate_proof_pdf(entries: list) -> bytes:
         entry_desc = entry.get('description', '')
         entry_image = entry.get('image', '')
         
-        type_label = type_labels.get(entry_type, '📄 Other')
+        type_label = type_labels.get(entry_type, 'Other')
         
-        # Entry header
-        story.append(Paragraph(f"<b>Entry {i}: {type_label}</b>", section_style))
-        story.append(Paragraph(f"Date: {entry_date}", meta_style))
+        # Entry header - compact
+        story.append(Paragraph(f"<b>Entry {i}: {type_label}</b> — {entry_date}", section_style))
         
         if entry_desc:
-            story.append(Paragraph(f"<i>Context: {entry_desc}</i>", meta_style))
+            story.append(Paragraph(f"<i>{entry_desc}</i>", meta_style))
         
-        # Add screenshot image if present
+        # Add screenshot image if present - LARGER, fills page width
         if entry_image:
             try:
                 import base64
                 from PIL import Image as PILImage
                 from reportlab.platypus import Image as RLImage
                 
-                # Handle base64 image data
                 if entry_image.startswith('data:'):
                     base64_data = entry_image.split(',')[1]
                 else:
@@ -2405,40 +2401,36 @@ def generate_proof_pdf(entries: list) -> bytes:
                 image_bytes = base64.b64decode(base64_data)
                 pil_img = PILImage.open(io.BytesIO(image_bytes))
                 
-                # Convert to RGB if necessary
                 if pil_img.mode in ('RGBA', 'P'):
                     pil_img = pil_img.convert('RGB')
                 
-                # Save to buffer
                 img_buffer = io.BytesIO()
                 pil_img.save(img_buffer, format='JPEG', quality=85)
                 img_buffer.seek(0)
                 
-                # Calculate size to fit page
+                # Fill page width, limit height
                 img_width, img_height = pil_img.size
-                max_width = 5 * inch
-                max_height = 4 * inch
+                max_width = 7 * inch
+                max_height = 8 * inch
                 scale = min(max_width / img_width, max_height / img_height)
                 
                 img_flowable = RLImage(img_buffer, width=img_width * scale, height=img_height * scale)
                 story.append(img_flowable)
-                story.append(Spacer(1, 10))
+                story.append(Spacer(1, 5))
             except Exception as e:
                 print(f"Image processing error: {e}")
                 story.append(Paragraph("[Screenshot could not be processed]", meta_style))
         
-        # Entry content in a box
+        # Entry content
         if entry_content:
             content_text = entry_content.replace('\n', '<br/>')
             story.append(Paragraph(content_text, content_style))
         
-        # Add separator
-        story.append(Spacer(1, 10))
-        
-        # Add a line separator between entries
+        # Thin separator
+        story.append(Spacer(1, 5))
         if i < len(sorted_entries):
-            story.append(Paragraph("─" * 60, ParagraphStyle('Line', textColor=colors.HexColor('#E5E7EB'), alignment=1)))
-            story.append(Spacer(1, 10))
+            story.append(Paragraph("─" * 80, ParagraphStyle('Line', textColor=colors.HexColor('#E5E7EB'), alignment=1, fontSize=6)))
+            story.append(Spacer(1, 5))
     
     # Footer note
     story.append(Spacer(1, 30))
