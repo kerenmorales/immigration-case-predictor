@@ -2408,13 +2408,13 @@ def generate_proof_pdf(entries: list) -> bytes:
                     pil_img = pil_img.convert('RGB')
                 
                 img_buffer = io.BytesIO()
-                pil_img.save(img_buffer, format='JPEG', quality=85)
+                pil_img.save(img_buffer, format='JPEG', quality=92)
                 img_buffer.seek(0)
                 
-                # Fill page width, limit height to fit with title
+                # Fill page width, limit height to fit 2 per page
                 img_width, img_height = pil_img.size
-                max_width = 7 * inch
-                max_height = 7 * inch
+                max_width = 6.5 * inch
+                max_height = 4 * inch
                 scale = min(max_width / img_width, max_height / img_height)
                 
                 img_flowable = RLImage(img_buffer, width=img_width * scale, height=img_height * scale)
