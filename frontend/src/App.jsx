@@ -2042,12 +2042,19 @@ function ProofOfRelationship({ user }) {
         const withData = data.filter(d => d.entries && d.entries.length > 0)
         setSavedDocs(withData)
         if (withData.length > 0) {
-          // Restore images from storage
+          // Restore images from storage as base64
           const restored = await Promise.all(withData[0].entries.map(async (entry) => {
             if (entry.imagePath && !entry.image) {
               try {
                 const { data: blob } = await supabase.storage.from('form-uploads').download(entry.imagePath)
-                if (blob) return { ...entry, image: URL.createObjectURL(blob) }
+                if (blob) {
+                  const base64 = await new Promise((resolve) => {
+                    const reader = new FileReader()
+                    reader.onload = () => resolve(reader.result)
+                    reader.readAsDataURL(blob)
+                  })
+                  return { ...entry, image: base64 }
+                }
               } catch (e) { /* skip failed images */ }
             }
             return entry
@@ -2117,18 +2124,21 @@ function ProofOfRelationship({ user }) {
     }
   }
 
-  // Load a saved document — downloads images from storage
+  // Load a saved document — downloads images from storage as base64
   const loadDocumentComm = async (docId) => {
     const { data } = await supabase.from('proof_entries').select('*').eq('id', docId).single()
     if (data && data.entries && data.entries.length > 0) {
-      // Restore images from storage
       const restored = await Promise.all(data.entries.map(async (entry) => {
         if (entry.imagePath && !entry.image) {
           try {
             const { data: blob } = await supabase.storage.from('form-uploads').download(entry.imagePath)
             if (blob) {
-              const url = URL.createObjectURL(blob)
-              return { ...entry, image: url }
+              const base64 = await new Promise((resolve) => {
+                const reader = new FileReader()
+                reader.onload = () => resolve(reader.result)
+                reader.readAsDataURL(blob)
+              })
+              return { ...entry, image: base64 }
             }
           } catch (e) { console.error('Image load error:', e) }
         }
