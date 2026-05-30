@@ -6,6 +6,28 @@ const API_URL = import.meta.env.VITE_API_URL ||
     ? 'https://immigration-case-predictor-production.up.railway.app' 
     : 'http://localhost:8000')
 
+// Compress image to max 800px width and 0.6 quality JPEG to reduce storage size
+const compressImage = (dataUrl, maxWidth = 800, quality = 0.6) => {
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      let width = img.width
+      let height = img.height
+      if (width > maxWidth) {
+        height = (height * maxWidth) / width
+        width = maxWidth
+      }
+      canvas.width = width
+      canvas.height = height
+      const ctx = canvas.getContext('2d')
+      ctx.drawImage(img, 0, 0, width, height)
+      resolve(canvas.toDataURL('image/jpeg', quality))
+    }
+    img.src = dataUrl
+  })
+}
+
 // Analytics tracking function - exported for use in components
 export const trackEvent = async (eventType, userId = null, userEmail = null, metadata = {}) => {
   try {
@@ -2100,8 +2122,9 @@ function ProofOfRelationship({ user }) {
     const file = e.target.files?.[0]
     if (!file) return
     const reader = new FileReader()
-    reader.onload = (event) => {
-      setNewEntry(prev => ({ ...prev, image: event.target.result }))
+    reader.onload = async (event) => {
+      const compressed = await compressImage(event.target.result)
+      setNewEntry(prev => ({ ...prev, image: compressed }))
     }
     reader.readAsDataURL(file)
   }
@@ -2113,8 +2136,9 @@ function ProofOfRelationship({ user }) {
       if (item.type.startsWith('image/')) {
         const file = item.getAsFile()
         const reader = new FileReader()
-        reader.onload = (event) => {
-          setNewEntry(prev => ({ ...prev, image: event.target.result }))
+        reader.onload = async (event) => {
+          const compressed = await compressImage(event.target.result)
+          setNewEntry(prev => ({ ...prev, image: compressed }))
         }
         reader.readAsDataURL(file)
         break
@@ -2561,13 +2585,14 @@ function PhotoAlbumOrganizer({ user }) {
       if (item.type.startsWith('image/')) {
         const file = item.getAsFile()
         const reader = new FileReader()
-        reader.onload = (event) => {
+        reader.onload = async (event) => {
+          const compressed = await compressImage(event.target.result)
           const key = `${categoryId}_${slotIndex}`
           setPhotos(prev => ({
             ...prev,
             [key]: {
               ...prev[key],
-              image: event.target.result,
+              image: compressed,
               fileName: file.name || 'pasted_image.png'
             }
           }))
@@ -2583,13 +2608,14 @@ function PhotoAlbumOrganizer({ user }) {
     if (!file) return
 
     const reader = new FileReader()
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
+      const compressed = await compressImage(event.target.result)
       const key = `${categoryId}_${slotIndex}`
       setPhotos(prev => ({
         ...prev,
         [key]: {
           ...prev[key],
-          image: event.target.result,
+          image: compressed,
           fileName: file.name
         }
       }))
