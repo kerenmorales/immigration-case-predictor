@@ -2380,11 +2380,15 @@ def generate_proof_pdf(entries: list) -> bytes:
         
         type_label = type_labels.get(entry_type, 'Other')
         
+        # Build entry as a group to keep together
+        from reportlab.platypus import KeepTogether
+        entry_elements = []
+        
         # Entry header - compact
-        story.append(Paragraph(f"<b>Entry {i}: {type_label}</b> — {entry_date}", section_style))
+        entry_elements.append(Paragraph(f"<b>Entry {i}: {type_label}</b> — {entry_date}", section_style))
         
         if entry_desc:
-            story.append(Paragraph(f"<i>{entry_desc}</i>", meta_style))
+            entry_elements.append(Paragraph(f"<i>{entry_desc}</i>", meta_style))
         
         # Add screenshot image if present - LARGER, fills page width
         if entry_image:
@@ -2415,20 +2419,22 @@ def generate_proof_pdf(entries: list) -> bytes:
                 scale = min(max_width / img_width, max_height / img_height)
                 
                 img_flowable = RLImage(img_buffer, width=img_width * scale, height=img_height * scale)
-                story.append(img_flowable)
-                story.append(Spacer(1, 5))
+                entry_elements.append(img_flowable)
             except Exception as e:
                 print(f"Image processing error: {e}")
-                story.append(Paragraph("[Screenshot could not be processed]", meta_style))
+                entry_elements.append(Paragraph("[Screenshot could not be processed]", meta_style))
         
         # Entry content
         if entry_content:
             content_text = entry_content.replace('\n', '<br/>')
-            story.append(Paragraph(content_text, content_style))
+            entry_elements.append(Paragraph(content_text, content_style))
+        
+        # Keep title + image together on same page
+        story.append(KeepTogether(entry_elements))
         
         # Thin separator
-        story.append(Spacer(1, 5))
         if i < len(sorted_entries):
+            story.append(Spacer(1, 5))
             story.append(Paragraph("─" * 80, ParagraphStyle('Line', textColor=colors.HexColor('#E5E7EB'), alignment=1, fontSize=6)))
             story.append(Spacer(1, 5))
     
