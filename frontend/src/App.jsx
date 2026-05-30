@@ -6,8 +6,8 @@ const API_URL = import.meta.env.VITE_API_URL ||
     ? 'https://immigration-case-predictor-production.up.railway.app' 
     : 'http://localhost:8000')
 
-// Compress image to max 500px width and 0.4 quality JPEG to reduce storage size
-const compressImage = (dataUrl, maxWidth = 500, quality = 0.4) => {
+// Compress image to max 600px width and 0.5 quality JPEG to reduce storage size
+const compressImage = (dataUrl, maxWidth = 600, quality = 0.5) => {
   return new Promise((resolve) => {
     const img = new Image()
     img.onload = () => {
