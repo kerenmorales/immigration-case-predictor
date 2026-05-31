@@ -2411,10 +2411,10 @@ def generate_proof_pdf(entries: list) -> bytes:
                 pil_img.save(img_buffer, format='JPEG', quality=92)
                 img_buffer.seek(0)
                 
-                # Fill page width, limit height to fit 2 per page
+                # Fit 4 entries per page - small images
                 img_width, img_height = pil_img.size
-                max_width = 6.5 * inch
-                max_height = 4 * inch
+                max_width = 3 * inch
+                max_height = 2 * inch
                 scale = min(max_width / img_width, max_height / img_height)
                 
                 img_flowable = RLImage(img_buffer, width=img_width * scale, height=img_height * scale)
@@ -2428,9 +2428,9 @@ def generate_proof_pdf(entries: list) -> bytes:
             content_text = entry_content.replace('\n', '<br/>')
             entry_elements.append(Paragraph(content_text, content_style))
         
-        # Add entry elements to story
-        for el in entry_elements:
-            story.append(el)
+        # Keep title + image together, allow 4 per page
+        from reportlab.platypus import KeepTogether
+        story.append(KeepTogether(entry_elements))
         
         # Thin separator
         if i < len(sorted_entries):
