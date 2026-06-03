@@ -27,6 +27,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Mount Stripe subscription routes (only if Stripe is configured)
+try:
+    from stripe_routes import router as stripe_router
+    app.include_router(stripe_router)
+    print("Stripe routes loaded")
+except Exception as e:
+    print(f"Stripe routes not loaded: {e}")
+
 # Model globals
 model = None
 tokenizer = None
