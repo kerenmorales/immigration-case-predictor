@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from './supabase'
+import { useLang, useT } from './i18n.jsx'
+import PaywallGate, { SubscriptionBadge } from './PaywallGate.jsx'
 
 const API_URL = import.meta.env.VITE_API_URL || 
   (window.location.hostname.includes('railway.app') 
@@ -70,6 +72,36 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('home')
   const [sponsorshipData, setSponsorshipData] = useState({})
+  const [resetMode, setResetMode] = useState(false)
+  const [emailConfirmed, setEmailConfirmed] = useState(false)
+  const { lang, setLang } = useLang()
+  const t = useT()
+
+  // Detect URL flags from email links and Stripe redirects
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('confirmed') === 'true') {
+      setEmailConfirmed(true)
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+    if (params.get('subscribed') === 'true') {
+      setActiveTab('home')
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+    if (params.get('canceled') === 'true') {
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [])
+
+  // Listen for password recovery flow
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setResetMode(true)
+      }
+    })
+    return () => subscription.unsubscribe()
+  }, [])
 
   // Track anonymous visit on mount
   useEffect(() => {
@@ -112,12 +144,17 @@ function App() {
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="animate-pulse text-slate-400">Loading...</div>
+        <div className="animate-pulse text-slate-400">{t('app.loading')}</div>
       </div>
     )
   }
 
-  if (!user) return <AuthPage onAdminAccess={() => setUser({ id: 'admin', email: 'admin@immigrationai.app', role: 'admin' })} />
+  // Password reset flow (user clicked email link)
+  if (resetMode) {
+    return <ResetPasswordPage onDone={() => { setResetMode(false); window.location.href = '/'; }} />
+  }
+
+  if (!user) return <AuthPage emailConfirmed={emailConfirmed} onAdminAccess={() => setUser({ id: 'admin', email: 'admin@immigrationai.app', role: 'admin' })} />
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -129,14 +166,30 @@ function App() {
               <span className="text-white text-lg">🍁</span>
             </div>
             <div>
-              <h1 className="text-xl font-semibold text-slate-800">ImmigrationAI</h1>
-              <p className="text-xs text-slate-500">Legal Intelligence Platform</p>
+              <h1 className="text-xl font-semibold text-slate-800">{t('app.title')}</h1>
+              <p className="text-xs text-slate-500">{t('app.subtitle')}</p>
             </div>
           </div>
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-4">
+            {/* Language Switcher */}
+            <div className="flex items-center bg-slate-100 rounded-lg p-0.5">
+              <button
+                onClick={() => setLang('en')}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${lang === 'en' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                EN
+              </button>
+              <button
+                onClick={() => setLang('es')}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${lang === 'es' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                ES
+              </button>
+            </div>
             <span className="text-sm text-slate-600">{user.email}</span>
+            <SubscriptionBadge user={user} />
             <button onClick={() => { supabase.auth.signOut(); setUser(null); }} className="text-sm text-slate-500 hover:text-slate-700">
-              Sign Out
+              {t('app.signOut')}
             </button>
           </div>
         </div>
@@ -145,12 +198,12 @@ function App() {
         <div className="max-w-6xl mx-auto px-6">
           <nav className="flex gap-1 overflow-x-auto">
             {[
-              { id: 'home', label: 'Overview' },
-              { id: 'eligibility', label: 'Eligibility Check' },
-              { id: 'visaforms', label: 'Visa Forms' },
-              { id: 'sponsorship', label: 'Sponsorship Forms' },
-              { id: 'predictor', label: 'Case Predictor' },
-              { id: 'history', label: 'My Cases' }
+              { id: 'home', label: t('nav.overview') },
+              { id: 'eligibility', label: t('nav.eligibility') },
+              { id: 'visaforms', label: t('nav.visaforms') },
+              { id: 'sponsorship', label: t('nav.sponsorship') },
+              { id: 'predictor', label: t('nav.predictor') },
+              { id: 'history', label: t('nav.history') }
             ].map(tab => (
               <button
                 key={tab.id}
@@ -171,9 +224,17 @@ function App() {
       <main className="max-w-6xl mx-auto px-6 py-8">
         {activeTab === 'home' && <HomePage setActiveTab={setActiveTab} />}
         {activeTab === 'eligibility' && <EligibilityCheck setActiveTab={setActiveTab} />}
-        {activeTab === 'visaforms' && <VisaForms user={user} />}
+        {activeTab === 'visaforms' && (
+          <PaywallGate user={user} feature="visa_forms">
+            <VisaForms user={user} />
+          </PaywallGate>
+        )}
         {activeTab === 'predictor' && <CasePredictor user={user} />}
-        {activeTab === 'sponsorship' && <SponsorshipAssistant formData={sponsorshipData} setFormData={setSponsorshipData} user={user} />}
+        {activeTab === 'sponsorship' && (
+          <PaywallGate user={user} feature="sponsorship">
+            <SponsorshipAssistant formData={sponsorshipData} setFormData={setSponsorshipData} user={user} />
+          </PaywallGate>
+        )}
         {activeTab === 'history' && <UserHistory user={user} />}
       </main>
 
@@ -1482,28 +1543,31 @@ function VisaForms({ user }) {
   )
 }
 
-function AuthPage({ onAdminAccess }) {
-  const [isLogin, setIsLogin] = useState(true)
-  const [email, setEmail] = useState('')
+function ResetPasswordPage({ onDone }) {
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [message, setMessage] = useState(null)
+  const [success, setSuccess] = useState(false)
+  const { lang } = useLang()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    setLoading(true)
     setError(null)
-    setMessage(null)
+    if (password.length < 6) {
+      setError(lang === 'es' ? 'La contraseña debe tener al menos 6 caracteres.' : 'Password must be at least 6 characters.')
+      return
+    }
+    if (password !== confirmPassword) {
+      setError(lang === 'es' ? 'Las contraseñas no coinciden.' : 'Passwords do not match.')
+      return
+    }
+    setLoading(true)
     try {
-      if (isLogin) {
-        const { error } = await supabase.auth.signInWithPassword({ email, password })
-        if (error) throw error
-      } else {
-        const { error } = await supabase.auth.signUp({ email, password })
-        if (error) throw error
-        setMessage('Check your email for a confirmation link!')
-      }
+      const { error } = await supabase.auth.updateUser({ password })
+      if (error) throw error
+      setSuccess(true)
+      setTimeout(() => onDone(), 2000)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -1512,7 +1576,153 @@ function AuthPage({ onAdminAccess }) {
   }
 
   return (
+    <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
+        <div className="flex items-center gap-3 mb-6 justify-center">
+          <div className="w-10 h-10 bg-red-600 rounded-lg flex items-center justify-center">
+            <span className="text-white text-lg">🍁</span>
+          </div>
+          <h1 className="text-xl font-bold text-slate-800">ImmigrationAI</h1>
+        </div>
+
+        <h2 className="text-2xl font-semibold text-slate-800 mb-2 text-center">
+          {lang === 'es' ? 'Crear nueva contraseña' : 'Create new password'}
+        </h2>
+        <p className="text-slate-500 mb-6 text-center text-sm">
+          {lang === 'es' ? 'Ingrese una contraseña nueva para su cuenta' : 'Enter a new password for your account'}
+        </p>
+
+        {success ? (
+          <div className="bg-green-50 border border-green-200 text-green-700 rounded-lg p-4 text-center">
+            ✅ {lang === 'es' ? '¡Contraseña actualizada! Redirigiendo...' : 'Password updated! Redirecting...'}
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit}>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                {lang === 'es' ? 'Nueva contraseña' : 'New password'}
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full border border-slate-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                placeholder="••••••••"
+                required
+                minLength={6}
+              />
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                {lang === 'es' ? 'Confirmar contraseña' : 'Confirm password'}
+              </label>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="w-full border border-slate-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                placeholder="••••••••"
+                required
+                minLength={6}
+              />
+            </div>
+            {error && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">{error}</div>
+            )}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-lg font-medium disabled:bg-slate-300"
+            >
+              {loading
+                ? (lang === 'es' ? 'Guardando...' : 'Saving...')
+                : (lang === 'es' ? 'Actualizar contraseña' : 'Update password')}
+            </button>
+          </form>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function AuthPage({ onAdminAccess, emailConfirmed = false }) {
+  const [isLogin, setIsLogin] = useState(true)
+  const [forgotMode, setForgotMode] = useState(false)
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const [message, setMessage] = useState(emailConfirmed
+    ? '✅ ¡Su correo fue confirmado! Ya puede iniciar sesión.'
+    : null)
+  const { lang, setLang } = useLang()
+  const t = useT()
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setLoading(true)
+    setError(null)
+    setMessage(null)
+    try {
+      if (forgotMode) {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/?reset=true`
+        })
+        if (error) throw error
+        setMessage(lang === 'es'
+          ? 'Le enviamos un enlace para restablecer su contraseña. Revise su correo (y la carpeta de spam).'
+          : 'We sent you a password reset link. Check your email (and spam folder).')
+      } else if (isLogin) {
+        const { error } = await supabase.auth.signInWithPassword({ email, password })
+        if (error) throw error
+      } else {
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: `${window.location.origin}/?confirmed=true`,
+            data: { preferred_language: lang }
+          }
+        })
+        if (error) throw error
+        setMessage(lang === 'es'
+          ? '¡Cuenta creada! Le enviamos un correo de confirmación. Por favor haga clic en el enlace para activar su cuenta.'
+          : 'Account created! We sent you a confirmation email. Please click the link to activate your account.')
+      }
+    } catch (err) {
+      let msg = err.message
+      if (lang === 'es') {
+        if (msg.includes('Invalid login credentials')) msg = 'Correo o contraseña incorrectos.'
+        else if (msg.includes('Email not confirmed')) msg = 'Por favor confirme su correo antes de iniciar sesión. Revise su bandeja de entrada.'
+        else if (msg.includes('User already registered')) msg = 'Ya existe una cuenta con ese correo. Inicie sesión.'
+        else if (msg.includes('Password should be at least')) msg = 'La contraseña debe tener al menos 6 caracteres.'
+      }
+      setError(msg)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
     <div className="min-h-screen bg-slate-100 flex">
+      {/* Language Switcher - Top Right */}
+      <div className="absolute top-4 right-4 z-10">
+        <div className="flex items-center bg-white rounded-lg p-0.5 shadow-sm border border-slate-200">
+          <button
+            onClick={() => setLang('en')}
+            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${lang === 'en' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            EN
+          </button>
+          <button
+            onClick={() => setLang('es')}
+            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${lang === 'es' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            ES
+          </button>
+        </div>
+      </div>
+
       {/* Left Panel - Branding */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-slate-800 to-slate-900 p-12 flex-col justify-between">
         <div>
@@ -1521,37 +1731,37 @@ function AuthPage({ onAdminAccess }) {
               <span className="text-white text-2xl">🍁</span>
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-white">ImmigrationAI</h1>
-              <p className="text-slate-400 text-sm">Legal Intelligence Platform</p>
+              <h1 className="text-2xl font-bold text-white">{t('app.title')}</h1>
+              <p className="text-slate-400 text-sm">{t('app.subtitle')}</p>
             </div>
           </div>
           <h2 className="text-4xl font-bold text-white mb-6">
-            AI-Powered Immigration Case Analysis
+            {t('home.hero.title')}
           </h2>
           <p className="text-xl text-slate-300 mb-8">
-            Leverage machine learning trained on 7,093 Federal Court decisions to gain insights into case outcomes.
+            {t('home.hero.subtitle')}
           </p>
           <div className="space-y-4">
             <div className="flex items-center gap-3 text-slate-300">
               <span className="text-green-400">✓</span>
-              <span>Case outcome prediction with confidence scoring</span>
+              <span>{t('home.predictor.f3')}</span>
             </div>
             <div className="flex items-center gap-3 text-slate-300">
               <span className="text-green-400">✓</span>
-              <span>Key legal factor identification</span>
+              <span>{t('home.predictor.f2')}</span>
             </div>
             <div className="flex items-center gap-3 text-slate-300">
               <span className="text-green-400">✓</span>
-              <span>Sponsorship form assistance</span>
+              <span>{t('home.sponsorship.f1')}</span>
             </div>
             <div className="flex items-center gap-3 text-slate-300">
               <span className="text-green-400">✓</span>
-              <span>Secure case history storage</span>
+              <span>{t('home.sponsorship.f4')}</span>
             </div>
           </div>
         </div>
         <p className="text-slate-500 text-sm">
-          Trusted by immigration professionals across Canada
+          {lang === 'es' ? 'Confiado por profesionales de inmigración en todo Canadá' : 'Trusted by immigration professionals across Canada'}
         </p>
       </div>
 
@@ -1569,36 +1779,60 @@ function AuthPage({ onAdminAccess }) {
 
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
             <h2 className="text-2xl font-semibold text-slate-800 mb-2">
-              {isLogin ? 'Welcome back' : 'Create your account'}
+              {forgotMode
+                ? (lang === 'es' ? 'Restablecer contraseña' : 'Reset password')
+                : isLogin
+                  ? (lang === 'es' ? 'Bienvenido de nuevo' : 'Welcome back')
+                  : (lang === 'es' ? 'Cree su cuenta' : 'Create your account')}
             </h2>
             <p className="text-slate-500 mb-6">
-              {isLogin ? 'Sign in to access your dashboard' : 'Start analyzing cases today'}
+              {forgotMode
+                ? (lang === 'es' ? 'Le enviaremos un enlace para crear una nueva contraseña' : "We'll send you a link to create a new password")
+                : isLogin
+                  ? (lang === 'es' ? 'Inicie sesión para acceder a su panel' : 'Sign in to access your dashboard')
+                  : (lang === 'es' ? 'Comience hoy' : 'Start today')}
             </p>
 
             <form onSubmit={handleSubmit}>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 mb-2">Email address</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">{t('auth.email')}</label>
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full border border-slate-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-red-500 focus:border-transparent transition-shadow"
-                  placeholder="you@lawfirm.com"
+                  placeholder="you@email.com"
                   required
                 />
               </div>
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-slate-700 mb-2">Password</label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full border border-slate-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-red-500 focus:border-transparent transition-shadow"
-                  placeholder="••••••••"
-                  required
-                  minLength={6}
-                />
-              </div>
+              {!forgotMode && (
+                <div className="mb-2">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">{t('auth.password')}</label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full border border-slate-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-red-500 focus:border-transparent transition-shadow"
+                    placeholder="••••••••"
+                    required
+                    minLength={6}
+                  />
+                </div>
+              )}
+
+              {/* Forgot password link (only on login) */}
+              {isLogin && !forgotMode && (
+                <div className="mb-4 text-right">
+                  <button
+                    type="button"
+                    onClick={() => { setForgotMode(true); setError(null); setMessage(null); }}
+                    className="text-sm text-red-600 hover:text-red-700"
+                  >
+                    {lang === 'es' ? '¿Olvidó su contraseña?' : 'Forgot password?'}
+                  </button>
+                </div>
+              )}
+              {!isLogin && !forgotMode && <div className="mb-4"></div>}
 
               {error && <div className="mb-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">{error}</div>}
               {message && <div className="mb-4 p-4 bg-green-50 border border-green-200 text-green-700 rounded-lg text-sm">{message}</div>}
@@ -1608,20 +1842,38 @@ function AuthPage({ onAdminAccess }) {
                 disabled={loading}
                 className="w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-lg font-medium transition-colors disabled:bg-slate-300"
               >
-                {loading ? 'Please wait...' : (isLogin ? 'Sign In' : 'Create Account')}
+                {loading
+                  ? (lang === 'es' ? 'Por favor espere...' : 'Please wait...')
+                  : forgotMode
+                    ? (lang === 'es' ? 'Enviar enlace' : 'Send reset link')
+                    : isLogin ? t('auth.signIn') : t('auth.signUp')}
               </button>
+
+              {forgotMode && (
+                <button
+                  type="button"
+                  onClick={() => { setForgotMode(false); setError(null); setMessage(null); }}
+                  className="w-full mt-3 text-sm text-slate-500 hover:text-slate-700"
+                >
+                  ← {lang === 'es' ? 'Volver a iniciar sesión' : 'Back to sign in'}
+                </button>
+              )}
             </form>
 
-            <p className="mt-6 text-center text-sm text-slate-500">
-              {isLogin ? "Don't have an account? " : "Already have an account? "}
-              <button onClick={() => setIsLogin(!isLogin)} className="text-red-600 font-medium hover:underline">
-                {isLogin ? 'Sign up' : 'Sign in'}
-              </button>
-            </p>
+            {!forgotMode && (
+              <p className="mt-6 text-center text-sm text-slate-500">
+                {isLogin ? t('auth.noAccount') + ' ' : t('auth.hasAccount') + ' '}
+                <button onClick={() => { setIsLogin(!isLogin); setError(null); setMessage(null); }} className="text-red-600 font-medium hover:underline">
+                  {isLogin ? t('auth.signUp') : t('auth.signIn')}
+                </button>
+              </p>
+            )}
           </div>
 
           <p className="mt-6 text-center text-xs text-slate-400">
-            By signing up, you agree to our Terms of Service and Privacy Policy
+            {lang === 'es'
+              ? 'Al registrarse, acepta nuestros Términos de Servicio y Política de Privacidad'
+              : 'By signing up, you agree to our Terms of Service and Privacy Policy'}
           </p>
 
           {/* Admin Quick Access */}
@@ -3901,255 +4153,3 @@ function SponsorshipAssistant({ formData, setFormData, user }) {
                     <div className="md:col-span-2">
                       <label className="block text-sm font-medium text-slate-700 mb-1.5">Relationship History</label>
                       <textarea
-                        value={localFormData.relationship_history || ''}
-                        onChange={(e) => updateField('relationship_history', e.target.value)}
-                        rows={4}
-                        className="w-full border border-slate-300 rounded-lg p-4 focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none"
-                        placeholder="Describe how your relationship developed..."
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {error && <div className="mt-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">{error}</div>}
-                {success && <div className="mt-4 p-4 bg-green-50 border border-green-200 text-green-700 rounded-lg text-sm">{success}</div>}
-
-                <div className="flex justify-between mt-8 pt-6 border-t border-slate-200">
-                  <button
-                    onClick={() => setStep(s => Math.max(1, s - 1))}
-                    disabled={step === 1}
-                    className="px-6 py-2.5 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Previous
-                  </button>
-                  <div className="flex gap-3">
-                    <button onClick={handleSave} disabled={loading} className="px-6 py-2.5 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50">
-                      {loading ? 'Saving...' : 'Save Draft'}
-                    </button>
-                    {step < 3 ? (
-                      <button
-                        onClick={() => setStep(s => s + 1)}
-                        disabled={!canProceed()}
-                        className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium disabled:bg-slate-300 disabled:cursor-not-allowed"
-                      >
-                        Continue
-                      </button>
-                    ) : (
-                      <button
-                        onClick={handleDownloadPDF}
-                        disabled={loading || !canProceed()}
-                        className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium disabled:bg-slate-300 disabled:cursor-not-allowed"
-                      >
-                        {loading ? 'Generating...' : 'Download PDF Summary'}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <FormReports formData={formData} />
-      )}
-    </div>
-  )
-}
-
-function FormReports({ formData }) {
-  const [activeForm, setActiveForm] = useState('IMM1344')
-
-  const renderIMM1344 = () => (
-    <div className="space-y-6">
-      <div className="bg-slate-50 rounded-lg p-4">
-        <h4 className="font-medium text-slate-800 mb-3">IMM 1344 - Application to Sponsor</h4>
-        <p className="text-sm text-slate-600 mb-4">Sponsor eligibility and undertaking form</p>
-      </div>
-      <div className="grid grid-cols-2 gap-4 text-sm">
-        <div><span className="text-slate-500">Family Name:</span> <span className="font-medium">{formData.sponsor_family_name || '—'}</span></div>
-        <div><span className="text-slate-500">Given Name(s):</span> <span className="font-medium">{formData.sponsor_given_name || '—'}</span></div>
-        <div><span className="text-slate-500">Date of Birth:</span> <span className="font-medium">{formData.sponsor_dob || '—'}</span></div>
-        <div><span className="text-slate-500">Country of Birth:</span> <span className="font-medium">{formData.sponsor_country_birth || '—'}</span></div>
-        <div><span className="text-slate-500">Citizenship:</span> <span className="font-medium">{formData.sponsor_citizenship || '—'}</span></div>
-        <div><span className="text-slate-500">Address:</span> <span className="font-medium">{formData.sponsor_address || '—'}</span></div>
-        <div><span className="text-slate-500">Email:</span> <span className="font-medium">{formData.sponsor_email || '—'}</span></div>
-        <div><span className="text-slate-500">Phone:</span> <span className="font-medium">{formData.sponsor_phone || '—'}</span></div>
-      </div>
-    </div>
-  )
-
-  const renderIMM0008 = () => (
-    <div className="space-y-6">
-      <div className="bg-slate-50 rounded-lg p-4">
-        <h4 className="font-medium text-slate-800 mb-3">IMM 0008 - Generic Application Form</h4>
-        <p className="text-sm text-slate-600 mb-4">Principal applicant information</p>
-      </div>
-      <div className="grid grid-cols-2 gap-4 text-sm">
-        <div><span className="text-slate-500">Family Name:</span> <span className="font-medium">{formData.applicant_family_name || '—'}</span></div>
-        <div><span className="text-slate-500">Given Name(s):</span> <span className="font-medium">{formData.applicant_given_name || '—'}</span></div>
-        <div><span className="text-slate-500">Date of Birth:</span> <span className="font-medium">{formData.applicant_dob || '—'}</span></div>
-        <div><span className="text-slate-500">Country of Birth:</span> <span className="font-medium">{formData.applicant_country_birth || '—'}</span></div>
-        <div><span className="text-slate-500">Citizenship:</span> <span className="font-medium">{formData.applicant_citizenship || '—'}</span></div>
-        <div><span className="text-slate-500">Country of Residence:</span> <span className="font-medium">{formData.applicant_residence || '—'}</span></div>
-        <div><span className="text-slate-500">Address:</span> <span className="font-medium">{formData.applicant_address || '—'}</span></div>
-        <div><span className="text-slate-500">Passport Number:</span> <span className="font-medium">{formData.applicant_passport || '—'}</span></div>
-      </div>
-    </div>
-  )
-
-  const renderIMM5532 = () => (
-    <div className="space-y-6">
-      <div className="bg-slate-50 rounded-lg p-4">
-        <h4 className="font-medium text-slate-800 mb-3">IMM 5532 - Relationship Information</h4>
-        <p className="text-sm text-slate-600 mb-4">Details about the relationship between sponsor and applicant</p>
-      </div>
-      <div className="grid grid-cols-2 gap-4 text-sm">
-        <div><span className="text-slate-500">Relationship Type:</span> <span className="font-medium capitalize">{formData.relationship_type?.replace('_', ' ') || '—'}</span></div>
-        <div><span className="text-slate-500">Date of Marriage/Union:</span> <span className="font-medium">{formData.date_married || '—'}</span></div>
-        <div><span className="text-slate-500">Place of Marriage:</span> <span className="font-medium">{formData.place_married || '—'}</span></div>
-        <div><span className="text-slate-500">How You Met:</span> <span className="font-medium">{formData.how_met || '—'}</span></div>
-      </div>
-      {formData.relationship_history && (
-        <div className="mt-4">
-          <span className="text-slate-500 text-sm">Relationship History:</span>
-          <p className="mt-1 text-sm bg-slate-50 p-3 rounded-lg">{formData.relationship_history}</p>
-        </div>
-      )}
-    </div>
-  )
-
-  return (
-    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-      <div className="bg-slate-50 px-6 py-4 border-b border-slate-200">
-        <h2 className="text-lg font-semibold text-slate-800">Form Reports</h2>
-        <p className="text-sm text-slate-500">View your data organized by IRCC form</p>
-      </div>
-      <div className="border-b border-slate-200">
-        <div className="flex">
-          {['IMM1344', 'IMM0008', 'IMM5532'].map(form => (
-            <button
-              key={form}
-              onClick={() => setActiveForm(form)}
-              className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${activeForm === form ? 'border-red-600 text-red-600 bg-white' : 'border-transparent text-slate-600 hover:text-slate-800'}`}
-            >
-              {form}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="p-6">
-        {activeForm === 'IMM1344' && renderIMM1344()}
-        {activeForm === 'IMM0008' && renderIMM0008()}
-        {activeForm === 'IMM5532' && renderIMM5532()}
-      </div>
-    </div>
-  )
-}
-
-function UserHistory({ user }) {
-  const [predictions, setPredictions] = useState([])
-  const [forms, setForms] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState('predictions')
-
-  useEffect(() => {
-    const fetchData = async () => {
-      const [predRes, formRes] = await Promise.all([
-        supabase.from('predictions').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
-        supabase.from('sponsorship_forms').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
-      ])
-      setPredictions(predRes.data || [])
-      setForms(formRes.data || [])
-      setLoading(false)
-    }
-    fetchData()
-  }, [user.id])
-
-  if (loading) {
-    return (
-      <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
-        <div className="animate-pulse text-slate-400">Loading your history...</div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-      <div className="bg-slate-50 px-6 py-4 border-b border-slate-200">
-        <h2 className="text-lg font-semibold text-slate-800">My Cases</h2>
-        <p className="text-sm text-slate-500">View your saved predictions and sponsorship forms</p>
-      </div>
-      <div className="border-b border-slate-200">
-        <div className="flex">
-          <button
-            onClick={() => setActiveTab('predictions')}
-            className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'predictions' ? 'border-red-600 text-red-600' : 'border-transparent text-slate-600 hover:text-slate-800'}`}
-          >
-            Predictions ({predictions.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('forms')}
-            className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'forms' ? 'border-red-600 text-red-600' : 'border-transparent text-slate-600 hover:text-slate-800'}`}
-          >
-            Sponsorship Forms ({forms.length})
-          </button>
-        </div>
-      </div>
-      <div className="p-6">
-        {activeTab === 'predictions' && (
-          predictions.length === 0 ? (
-            <p className="text-slate-500 text-center py-8">No predictions yet. Analyze a case to get started.</p>
-          ) : (
-            <div className="space-y-4">
-              {predictions.map(p => (
-                <div key={p.id} className="border border-slate-200 rounded-lg p-4">
-                  <div className="flex justify-between items-start mb-3">
-                    <div>
-                      <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${p.prediction === 'Allowed' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                        {p.prediction}
-                      </span>
-                      <span className="ml-3 text-sm text-slate-500">{(p.confidence * 100).toFixed(1)}% confidence</span>
-                    </div>
-                    <span className="text-xs text-slate-400">{new Date(p.created_at).toLocaleDateString()}</span>
-                  </div>
-                  <p className="text-sm text-slate-600 line-clamp-2">{p.case_text}</p>
-                  {p.country_of_origin && <p className="text-xs text-slate-500 mt-2">Country: {p.country_of_origin}</p>}
-                </div>
-              ))}
-            </div>
-          )
-        )}
-        {activeTab === 'forms' && (
-          forms.length === 0 ? (
-            <p className="text-slate-500 text-center py-8">No saved forms yet. Start a sponsorship application to get started.</p>
-          ) : (
-            <div className="space-y-4">
-              {forms.map(f => (
-                <div key={f.id} className="border border-slate-200 rounded-lg p-4">
-                  <div className="flex justify-between items-start mb-3">
-                    <div>
-                      <span className="font-medium text-slate-800">
-                        {f.form_data?.sponsor_family_name}, {f.form_data?.sponsor_given_name}
-                      </span>
-                      <span className="ml-3 text-sm text-slate-500">sponsoring</span>
-                      <span className="ml-1 font-medium text-slate-800">
-                        {f.form_data?.applicant_family_name}, {f.form_data?.applicant_given_name}
-                      </span>
-                    </div>
-                    <span className="text-xs text-slate-400">{new Date(f.created_at).toLocaleDateString()}</span>
-                  </div>
-                  <div className="flex gap-4 text-sm text-slate-500">
-                    <span>Type: {f.form_data?.relationship_type?.replace('_', ' ') || '—'}</span>
-                    <span>Status: {f.status}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )
-        )}
-      </div>
-    </div>
-  )
-}
-
-export default App
