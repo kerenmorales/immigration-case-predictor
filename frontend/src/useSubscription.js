@@ -1,16 +1,15 @@
 /**
- * Subscription state hook.
+ * Access state hook (90-day one-time payment model).
  *
- * Reads subscription status directly from Supabase (user_profiles table)
- * so we don't need to round-trip through the backend on every render.
+ * Reads access status directly from Supabase (user_profiles table).
  *
  * Returns:
  *   {
- *     status: 'free' | 'trial' | 'active' | 'past_due' | 'cancelled',
- *     isPaid: boolean,           // true if user has access to paid features
+ *     status: 'free' | 'active' | 'expired',
+ *     isPaid: boolean,           // true if user has access right now
  *     tier: string | null,
- *     trialEndsAt: Date | null,
- *     periodEnd: Date | null,
+ *     periodEnd: Date | null,    // when current access expires
+ *     daysRemaining: number,     // days until expiration
  *     loading: boolean,
  *   }
  */
@@ -23,8 +22,8 @@ export function useSubscription(user) {
     status: 'free',
     isPaid: false,
     tier: null,
-    trialEndsAt: null,
     periodEnd: null,
+    daysRemaining: 0,
     loading: true,
   })
 
@@ -35,8 +34,8 @@ export function useSubscription(user) {
         status: user?.id === 'admin' ? 'active' : 'free',
         isPaid: user?.id === 'admin',
         tier: user?.id === 'admin' ? 'admin' : null,
-        trialEndsAt: null,
         periodEnd: null,
+        daysRemaining: user?.id === 'admin' ? 9999 : 0,
         loading: false,
       })
       return
@@ -44,38 +43,48 @@ export function useSubscription(user) {
 
     let cancelled = false
 
+    const computeState = (data) => {
+      if (!data) return { status: 'free', isPaid: false, tier: null, periodEnd: null, daysRemaining: 0 }
+
+      const status = data.subscription_status || 'free'
+      const periodEnd = data.subscription_current_period_end ? new Date(data.subscription_current_period_end) : null
+      const now = new Date()
+
+      // Check expiration client-side too (in case server hasn't run the lazy expiry yet)
+      let effectiveStatus = status
+      if (status === 'active' && periodEnd && periodEnd < now) {
+        effectiveStatus = 'expired'
+      }
+
+      const isPaid = effectiveStatus === 'active'
+      const daysRemaining = periodEnd && periodEnd > now
+        ? Math.ceil((periodEnd - now) / (1000 * 60 * 60 * 24))
+        : 0
+
+      return {
+        status: effectiveStatus,
+        isPaid,
+        tier: data.subscription_tier,
+        periodEnd,
+        daysRemaining,
+      }
+    }
+
     const load = async () => {
       const { data, error } = await supabase
         .from('user_profiles')
-        .select('subscription_status, subscription_tier, trial_ends_at, subscription_current_period_end')
+        .select('subscription_status, subscription_tier, subscription_current_period_end')
         .eq('id', user.id)
         .maybeSingle()
 
       if (cancelled) return
 
-      if (error || !data) {
-        setState({
-          status: 'free',
-          isPaid: false,
-          tier: null,
-          trialEndsAt: null,
-          periodEnd: null,
-          loading: false,
-        })
+      if (error) {
+        setState({ status: 'free', isPaid: false, tier: null, periodEnd: null, daysRemaining: 0, loading: false })
         return
       }
 
-      const status = data.subscription_status || 'free'
-      const isPaid = ['active', 'trial'].includes(status)
-
-      setState({
-        status,
-        isPaid,
-        tier: data.subscription_tier,
-        trialEndsAt: data.trial_ends_at ? new Date(data.trial_ends_at) : null,
-        periodEnd: data.subscription_current_period_end ? new Date(data.subscription_current_period_end) : null,
-        loading: false,
-      })
+      setState({ ...computeState(data), loading: false })
     }
 
     load()
@@ -121,23 +130,6 @@ export async function startCheckout(user) {
   if (!response.ok) {
     const err = await response.json().catch(() => ({}))
     throw new Error(err.detail || 'Could not start checkout')
-  }
-  const { url } = await response.json()
-  window.location.href = url
-}
-
-/**
- * Open the Stripe customer portal (cancel, update card, etc.)
- */
-export async function openPortal(user) {
-  const response = await fetch(`${API_URL}/stripe/create-portal-session`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ user_id: user.id }),
-  })
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}))
-    throw new Error(err.detail || 'Could not open portal')
   }
   const { url } = await response.json()
   window.location.href = url
