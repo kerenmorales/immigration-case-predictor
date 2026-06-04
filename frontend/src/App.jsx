@@ -4153,3 +4153,255 @@ function SponsorshipAssistant({ formData, setFormData, user }) {
                     <div className="md:col-span-2">
                       <label className="block text-sm font-medium text-slate-700 mb-1.5">Relationship History</label>
                       <textarea
+                        value={localFormData.relationship_history || ''}
+                        onChange={(e) => updateField('relationship_history', e.target.value)}
+                        rows={4}
+                        className="w-full border border-slate-300 rounded-lg p-4 focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none"
+                        placeholder="Describe how your relationship developed..."
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {error && <div className="mt-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">{error}</div>}
+                {success && <div className="mt-4 p-4 bg-green-50 border border-green-200 text-green-700 rounded-lg text-sm">{success}</div>}
+
+                <div className="flex justify-between mt-8 pt-6 border-t border-slate-200">
+                  <button
+                    onClick={() => setStep(s => Math.max(1, s - 1))}
+                    disabled={step === 1}
+                    className="px-6 py-2.5 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Previous
+                  </button>
+                  <div className="flex gap-3">
+                    <button onClick={handleSave} disabled={loading} className="px-6 py-2.5 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50">
+                      {loading ? 'Saving...' : 'Save Draft'}
+                    </button>
+                    {step < 3 ? (
+                      <button
+                        onClick={() => setStep(s => s + 1)}
+                        disabled={!canProceed()}
+                        className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium disabled:bg-slate-300 disabled:cursor-not-allowed"
+                      >
+                        Continue
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleDownloadPDF}
+                        disabled={loading || !canProceed()}
+                        className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium disabled:bg-slate-300 disabled:cursor-not-allowed"
+                      >
+                        {loading ? 'Generating...' : 'Download PDF Summary'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <FormReports formData={formData} />
+      )}
+    </div>
+  )
+}
+
+function FormReports({ formData }) {
+  const [activeForm, setActiveForm] = useState('IMM1344')
+
+  const renderIMM1344 = () => (
+    <div className="space-y-6">
+      <div className="bg-slate-50 rounded-lg p-4">
+        <h4 className="font-medium text-slate-800 mb-3">IMM 1344 - Application to Sponsor</h4>
+        <p className="text-sm text-slate-600 mb-4">Sponsor eligibility and undertaking form</p>
+      </div>
+      <div className="grid grid-cols-2 gap-4 text-sm">
+        <div><span className="text-slate-500">Family Name:</span> <span className="font-medium">{formData.sponsor_family_name || '—'}</span></div>
+        <div><span className="text-slate-500">Given Name(s):</span> <span className="font-medium">{formData.sponsor_given_name || '—'}</span></div>
+        <div><span className="text-slate-500">Date of Birth:</span> <span className="font-medium">{formData.sponsor_dob || '—'}</span></div>
+        <div><span className="text-slate-500">Country of Birth:</span> <span className="font-medium">{formData.sponsor_country_birth || '—'}</span></div>
+        <div><span className="text-slate-500">Citizenship:</span> <span className="font-medium">{formData.sponsor_citizenship || '—'}</span></div>
+        <div><span className="text-slate-500">Address:</span> <span className="font-medium">{formData.sponsor_address || '—'}</span></div>
+        <div><span className="text-slate-500">Email:</span> <span className="font-medium">{formData.sponsor_email || '—'}</span></div>
+        <div><span className="text-slate-500">Phone:</span> <span className="font-medium">{formData.sponsor_phone || '—'}</span></div>
+      </div>
+    </div>
+  )
+
+  const renderIMM0008 = () => (
+    <div className="space-y-6">
+      <div className="bg-slate-50 rounded-lg p-4">
+        <h4 className="font-medium text-slate-800 mb-3">IMM 0008 - Generic Application Form</h4>
+        <p className="text-sm text-slate-600 mb-4">Principal applicant information</p>
+      </div>
+      <div className="grid grid-cols-2 gap-4 text-sm">
+        <div><span className="text-slate-500">Family Name:</span> <span className="font-medium">{formData.applicant_family_name || '—'}</span></div>
+        <div><span className="text-slate-500">Given Name(s):</span> <span className="font-medium">{formData.applicant_given_name || '—'}</span></div>
+        <div><span className="text-slate-500">Date of Birth:</span> <span className="font-medium">{formData.applicant_dob || '—'}</span></div>
+        <div><span className="text-slate-500">Country of Birth:</span> <span className="font-medium">{formData.applicant_country_birth || '—'}</span></div>
+        <div><span className="text-slate-500">Citizenship:</span> <span className="font-medium">{formData.applicant_citizenship || '—'}</span></div>
+        <div><span className="text-slate-500">Country of Residence:</span> <span className="font-medium">{formData.applicant_residence || '—'}</span></div>
+        <div><span className="text-slate-500">Address:</span> <span className="font-medium">{formData.applicant_address || '—'}</span></div>
+        <div><span className="text-slate-500">Passport Number:</span> <span className="font-medium">{formData.applicant_passport || '—'}</span></div>
+      </div>
+    </div>
+  )
+
+  const renderIMM5532 = () => (
+    <div className="space-y-6">
+      <div className="bg-slate-50 rounded-lg p-4">
+        <h4 className="font-medium text-slate-800 mb-3">IMM 5532 - Relationship Information</h4>
+        <p className="text-sm text-slate-600 mb-4">Details about the relationship between sponsor and applicant</p>
+      </div>
+      <div className="grid grid-cols-2 gap-4 text-sm">
+        <div><span className="text-slate-500">Relationship Type:</span> <span className="font-medium capitalize">{formData.relationship_type?.replace('_', ' ') || '—'}</span></div>
+        <div><span className="text-slate-500">Date of Marriage/Union:</span> <span className="font-medium">{formData.date_married || '—'}</span></div>
+        <div><span className="text-slate-500">Place of Marriage:</span> <span className="font-medium">{formData.place_married || '—'}</span></div>
+        <div><span className="text-slate-500">How You Met:</span> <span className="font-medium">{formData.how_met || '—'}</span></div>
+      </div>
+      {formData.relationship_history && (
+        <div className="mt-4">
+          <span className="text-slate-500 text-sm">Relationship History:</span>
+          <p className="mt-1 text-sm bg-slate-50 p-3 rounded-lg">{formData.relationship_history}</p>
+        </div>
+      )}
+    </div>
+  )
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <div className="bg-slate-50 px-6 py-4 border-b border-slate-200">
+        <h2 className="text-lg font-semibold text-slate-800">Form Reports</h2>
+        <p className="text-sm text-slate-500">View your data organized by IRCC form</p>
+      </div>
+      <div className="border-b border-slate-200">
+        <div className="flex">
+          {['IMM1344', 'IMM0008', 'IMM5532'].map(form => (
+            <button
+              key={form}
+              onClick={() => setActiveForm(form)}
+              className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${activeForm === form ? 'border-red-600 text-red-600 bg-white' : 'border-transparent text-slate-600 hover:text-slate-800'}`}
+            >
+              {form}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="p-6">
+        {activeForm === 'IMM1344' && renderIMM1344()}
+        {activeForm === 'IMM0008' && renderIMM0008()}
+        {activeForm === 'IMM5532' && renderIMM5532()}
+      </div>
+    </div>
+  )
+}
+
+function UserHistory({ user }) {
+  const [predictions, setPredictions] = useState([])
+  const [forms, setForms] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState('predictions')
+
+  useEffect(() => {
+    const fetchData = async () => {
+      const [predRes, formRes] = await Promise.all([
+        supabase.from('predictions').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+        supabase.from('sponsorship_forms').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
+      ])
+      setPredictions(predRes.data || [])
+      setForms(formRes.data || [])
+      setLoading(false)
+    }
+    fetchData()
+  }, [user.id])
+
+  if (loading) {
+    return (
+      <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
+        <div className="animate-pulse text-slate-400">Loading your history...</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <div className="bg-slate-50 px-6 py-4 border-b border-slate-200">
+        <h2 className="text-lg font-semibold text-slate-800">My Cases</h2>
+        <p className="text-sm text-slate-500">View your saved predictions and sponsorship forms</p>
+      </div>
+      <div className="border-b border-slate-200">
+        <div className="flex">
+          <button
+            onClick={() => setActiveTab('predictions')}
+            className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'predictions' ? 'border-red-600 text-red-600' : 'border-transparent text-slate-600 hover:text-slate-800'}`}
+          >
+            Predictions ({predictions.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('forms')}
+            className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'forms' ? 'border-red-600 text-red-600' : 'border-transparent text-slate-600 hover:text-slate-800'}`}
+          >
+            Sponsorship Forms ({forms.length})
+          </button>
+        </div>
+      </div>
+      <div className="p-6">
+        {activeTab === 'predictions' && (
+          predictions.length === 0 ? (
+            <p className="text-slate-500 text-center py-8">No predictions yet. Analyze a case to get started.</p>
+          ) : (
+            <div className="space-y-4">
+              {predictions.map(p => (
+                <div key={p.id} className="border border-slate-200 rounded-lg p-4">
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${p.prediction === 'Allowed' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                        {p.prediction}
+                      </span>
+                      <span className="ml-3 text-sm text-slate-500">{(p.confidence * 100).toFixed(1)}% confidence</span>
+                    </div>
+                    <span className="text-xs text-slate-400">{new Date(p.created_at).toLocaleDateString()}</span>
+                  </div>
+                  <p className="text-sm text-slate-600 line-clamp-2">{p.case_text}</p>
+                  {p.country_of_origin && <p className="text-xs text-slate-500 mt-2">Country: {p.country_of_origin}</p>}
+                </div>
+              ))}
+            </div>
+          )
+        )}
+        {activeTab === 'forms' && (
+          forms.length === 0 ? (
+            <p className="text-slate-500 text-center py-8">No saved forms yet. Start a sponsorship application to get started.</p>
+          ) : (
+            <div className="space-y-4">
+              {forms.map(f => (
+                <div key={f.id} className="border border-slate-200 rounded-lg p-4">
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <span className="font-medium text-slate-800">
+                        {f.form_data?.sponsor_family_name}, {f.form_data?.sponsor_given_name}
+                      </span>
+                      <span className="ml-3 text-sm text-slate-500">sponsoring</span>
+                      <span className="ml-1 font-medium text-slate-800">
+                        {f.form_data?.applicant_family_name}, {f.form_data?.applicant_given_name}
+                      </span>
+                    </div>
+                    <span className="text-xs text-slate-400">{new Date(f.created_at).toLocaleDateString()}</span>
+                  </div>
+                  <div className="flex gap-4 text-sm text-slate-500">
+                    <span>Type: {f.form_data?.relationship_type?.replace('_', ' ') || '—'}</span>
+                    <span>Status: {f.status}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        )}
+      </div>
+    </div>
+  )
+}
+
+export default App
