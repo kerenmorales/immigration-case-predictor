@@ -1,25 +1,28 @@
 """
-Stripe subscription routes.
+Stripe payment routes — One-time payment for 90 days of access.
+
+Business model:
+  - User pays $9.99 once
+  - Gets 90 days of access from the date of payment
+  - After 90 days, access expires and they must purchase again
 
 Endpoints:
-  POST /stripe/create-checkout-session  - Start a checkout
-  POST /stripe/create-portal-session    - Manage subscription (cancel, update card)
-  POST /stripe/webhook                  - Receive subscription state changes from Stripe
-  GET  /stripe/subscription/{user_id}   - Check subscription status
+  POST /stripe/create-checkout-session  - Start a checkout (one-time payment)
+  POST /stripe/webhook                  - Receive payment events from Stripe
+  GET  /stripe/subscription/{user_id}   - Check access status
 
 Required env vars:
   STRIPE_SECRET_KEY
   STRIPE_WEBHOOK_SECRET
-  STRIPE_PRICE_ID
+  STRIPE_PRICE_ID            (a one-time/one-off price, NOT recurring)
   STRIPE_SUCCESS_URL
   STRIPE_CANCEL_URL
-  STRIPE_PORTAL_RETURN_URL
   SUPABASE_URL
   SUPABASE_SERVICE_KEY  (NOT the anon key)
 """
 
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import stripe
@@ -35,7 +38,9 @@ WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 PRICE_ID = os.environ.get("STRIPE_PRICE_ID", "")
 SUCCESS_URL = os.environ.get("STRIPE_SUCCESS_URL", "https://your-domain.com/?subscribed=true")
 CANCEL_URL = os.environ.get("STRIPE_CANCEL_URL", "https://your-domain.com/?canceled=true")
-PORTAL_RETURN_URL = os.environ.get("STRIPE_PORTAL_RETURN_URL", "https://your-domain.com/")
+
+# Access duration after a successful payment
+ACCESS_DAYS = int(os.environ.get("ACCESS_DAYS", "90"))
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
@@ -58,13 +63,12 @@ class CheckoutRequest(BaseModel):
     email: str
 
 
-class PortalRequest(BaseModel):
-    user_id: str
-
-
 @router.post("/create-checkout-session")
 async def create_checkout_session(req: CheckoutRequest):
-    """Start a Stripe Checkout session."""
+    """
+    Start a Stripe Checkout session for a one-time $9.99 payment.
+    On successful payment, the webhook grants the user 90 days of access.
+    """
     if not stripe.api_key or not PRICE_ID:
         raise HTTPException(500, "Stripe is not configured on this server")
 
@@ -82,17 +86,17 @@ async def create_checkout_session(req: CheckoutRequest):
             customer_id = customer.id
             sb.table("user_profiles").update({"stripe_customer_id": customer_id}).eq("id", req.user_id).execute()
 
+        # Mode is 'payment' for one-time, NOT 'subscription'
         session = stripe.checkout.Session.create(
             customer=customer_id,
-            mode="subscription",
+            mode="payment",
             line_items=[{"price": PRICE_ID, "quantity": 1}],
             success_url=SUCCESS_URL,
             cancel_url=CANCEL_URL,
             allow_promotion_codes=True,
             metadata={"supabase_user_id": req.user_id},
-            subscription_data={
+            payment_intent_data={
                 "metadata": {"supabase_user_id": req.user_id},
-                "trial_period_days": 7,
             },
         )
         return {"url": session.url}
@@ -102,63 +106,52 @@ async def create_checkout_session(req: CheckoutRequest):
         raise HTTPException(500, f"Failed to create checkout: {str(e)}")
 
 
-@router.post("/create-portal-session")
-async def create_portal_session(req: PortalRequest):
-    """Open the Stripe Customer Portal for subscription management."""
-    if not stripe.api_key:
-        raise HTTPException(500, "Stripe is not configured on this server")
-
-    try:
-        sb = get_supabase()
-        profile_resp = sb.table("user_profiles").select("stripe_customer_id").eq("id", req.user_id).execute()
-        rows = profile_resp.data or []
-        customer_id = rows[0].get("stripe_customer_id") if rows else None
-
-        if not customer_id:
-            raise HTTPException(400, "No Stripe customer found for this user")
-
-        session = stripe.billing_portal.Session.create(
-            customer=customer_id,
-            return_url=PORTAL_RETURN_URL,
-        )
-        return {"url": session.url}
-    except stripe.error.StripeError as e:
-        raise HTTPException(400, f"Stripe error: {e.user_message or str(e)}")
-    except Exception as e:
-        raise HTTPException(500, f"Failed to create portal session: {str(e)}")
-
-
 @router.get("/subscription/{user_id}")
 async def get_subscription(user_id: str):
-    """Return the current subscription state for a user."""
+    """
+    Return the current access state for a user.
+    Maps to: 'free' (never paid or expired) or 'active' (within 90-day window).
+    """
     try:
         sb = get_supabase()
         resp = sb.table("user_profiles").select(
-            "subscription_status, subscription_tier, trial_ends_at, subscription_current_period_end"
+            "subscription_status, subscription_tier, subscription_current_period_end"
         ).eq("id", user_id).execute()
         rows = resp.data or []
         if not rows:
             return {"status": "free"}
+
         row = rows[0]
+        status = row.get("subscription_status", "free")
+        period_end = row.get("subscription_current_period_end")
+
+        # Auto-expire: if period_end is in the past, status becomes 'expired'
+        if period_end:
+            end_dt = datetime.fromisoformat(period_end.replace("Z", "+00:00"))
+            if end_dt < datetime.now(timezone.utc) and status == "active":
+                # Lazy update: mark as expired in DB
+                sb.table("user_profiles").update({
+                    "subscription_status": "expired"
+                }).eq("id", user_id).execute()
+                status = "expired"
+
         return {
-            "status": row.get("subscription_status", "free"),
+            "status": status,
             "tier": row.get("subscription_tier"),
-            "trial_ends_at": row.get("trial_ends_at"),
-            "current_period_end": row.get("subscription_current_period_end"),
+            "current_period_end": period_end,
         }
     except Exception as e:
         raise HTTPException(500, f"Failed to load subscription: {str(e)}")
 
 
-def _ts_to_iso(timestamp: Optional[int]) -> Optional[str]:
-    if not timestamp:
-        return None
-    return datetime.fromtimestamp(timestamp, tz=timezone.utc).isoformat()
-
-
 @router.post("/webhook")
 async def stripe_webhook(request: Request, stripe_signature: Optional[str] = Header(None)):
-    """Handle Stripe webhooks for subscription state changes."""
+    """
+    Handle Stripe webhooks for one-time payments.
+
+    The only event we care about is `checkout.session.completed` — when a user
+    successfully completes payment, we grant them ACCESS_DAYS days of access.
+    """
     if not WEBHOOK_SECRET:
         raise HTTPException(500, "Webhook secret not configured")
 
@@ -176,61 +169,45 @@ async def stripe_webhook(request: Request, stripe_signature: Optional[str] = Hea
 
     try:
         if event_type == "checkout.session.completed":
+            # Confirm payment was actually successful
+            payment_status = obj.get("payment_status")
+            if payment_status != "paid":
+                print(f"Checkout session completed but payment_status={payment_status} — ignoring")
+                return {"received": True}
+
             user_id = obj.get("metadata", {}).get("supabase_user_id")
             if user_id:
+                # Grant access for ACCESS_DAYS days from now
+                # If they already have active access, EXTEND it from the existing end date
+                # (this prevents accidental "lost days" if they pay early)
+                resp = sb.table("user_profiles").select(
+                    "subscription_status, subscription_current_period_end"
+                ).eq("id", user_id).execute()
+                rows = resp.data or []
+                current = rows[0] if rows else {}
+
+                now = datetime.now(timezone.utc)
+                base_dt = now
+
+                if current.get("subscription_status") == "active":
+                    existing_end = current.get("subscription_current_period_end")
+                    if existing_end:
+                        try:
+                            existing_dt = datetime.fromisoformat(existing_end.replace("Z", "+00:00"))
+                            if existing_dt > now:
+                                base_dt = existing_dt  # Stack on top
+                        except Exception:
+                            pass
+
+                new_end = base_dt + timedelta(days=ACCESS_DAYS)
+
                 sb.table("user_profiles").update({
                     "subscription_status": "active",
                     "subscription_tier": "premium",
-                    "stripe_subscription_id": obj.get("subscription"),
+                    "subscription_current_period_end": new_end.isoformat(),
                 }).eq("id", user_id).execute()
 
-        elif event_type in ("customer.subscription.updated", "customer.subscription.created"):
-            user_id = obj.get("metadata", {}).get("supabase_user_id")
-            if not user_id:
-                customer_id = obj.get("customer")
-                lookup = sb.table("user_profiles").select("id").eq("stripe_customer_id", customer_id).execute()
-                rows = lookup.data or []
-                user_id = rows[0].get("id") if rows else None
-
-            if user_id:
-                status = obj.get("status")
-                mapped_status = {
-                    "trialing": "trial",
-                    "active": "active",
-                    "past_due": "past_due",
-                    "canceled": "cancelled",
-                    "unpaid": "past_due",
-                    "incomplete": "free",
-                    "incomplete_expired": "free",
-                }.get(status, "free")
-
-                update = {
-                    "subscription_status": mapped_status,
-                    "stripe_subscription_id": obj.get("id"),
-                    "subscription_current_period_end": _ts_to_iso(obj.get("current_period_end")),
-                    "trial_ends_at": _ts_to_iso(obj.get("trial_end")),
-                }
-                update = {k: v for k, v in update.items() if v is not None or k == "subscription_status"}
-                sb.table("user_profiles").update(update).eq("id", user_id).execute()
-
-        elif event_type == "customer.subscription.deleted":
-            customer_id = obj.get("customer")
-            lookup = sb.table("user_profiles").select("id").eq("stripe_customer_id", customer_id).execute()
-            rows = lookup.data or []
-            if rows:
-                sb.table("user_profiles").update({
-                    "subscription_status": "cancelled",
-                    "stripe_subscription_id": None,
-                }).eq("id", rows[0]["id"]).execute()
-
-        elif event_type == "invoice.payment_failed":
-            customer_id = obj.get("customer")
-            lookup = sb.table("user_profiles").select("id").eq("stripe_customer_id", customer_id).execute()
-            rows = lookup.data or []
-            if rows:
-                sb.table("user_profiles").update({
-                    "subscription_status": "past_due",
-                }).eq("id", rows[0]["id"]).execute()
+                print(f"Granted {ACCESS_DAYS} days of access to user {user_id} until {new_end.isoformat()}")
 
     except Exception as e:
         # Don't 500 — Stripe will retry forever. Log and ack.
