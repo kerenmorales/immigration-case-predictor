@@ -165,7 +165,7 @@ async def stripe_webhook(request: Request, stripe_signature: Optional[str] = Hea
 
     sb = get_supabase()
     event_type = event["type"]
-    obj = event["data"]["object"]
+    obj = event["data"]["object"] or {}
 
     try:
         if event_type == "checkout.session.completed":
@@ -175,42 +175,77 @@ async def stripe_webhook(request: Request, stripe_signature: Optional[str] = Hea
                 print(f"Checkout session completed but payment_status={payment_status} — ignoring")
                 return {"received": True}
 
-            user_id = obj.get("metadata", {}).get("supabase_user_id")
-            if user_id:
-                # Grant access for ACCESS_DAYS days from now
-                # If they already have active access, EXTEND it from the existing end date
-                # (this prevents accidental "lost days" if they pay early)
-                resp = sb.table("user_profiles").select(
-                    "subscription_status, subscription_current_period_end"
-                ).eq("id", user_id).execute()
-                rows = resp.data or []
-                current = rows[0] if rows else {}
+            # Stripe sometimes returns metadata as None instead of {} — guard against it
+            metadata = obj.get("metadata") or {}
+            user_id = metadata.get("supabase_user_id")
+            product_type = metadata.get("product_type", "ninety_day_access")
 
-                now = datetime.now(timezone.utc)
-                base_dt = now
+            print(f"Webhook checkout.session.completed: user_id={user_id}, product_type={product_type}")
 
-                if current.get("subscription_status") == "active":
-                    existing_end = current.get("subscription_current_period_end")
-                    if existing_end:
-                        try:
-                            existing_dt = datetime.fromisoformat(existing_end.replace("Z", "+00:00"))
-                            if existing_dt > now:
-                                base_dt = existing_dt  # Stack on top
-                        except Exception:
-                            pass
+            if not user_id:
+                # Fallback: look up user by Stripe customer ID
+                customer_id = obj.get("customer")
+                if customer_id:
+                    lookup = sb.table("user_profiles").select("id").eq("stripe_customer_id", customer_id).execute()
+                    rows = lookup.data or []
+                    if rows:
+                        user_id = rows[0].get("id")
+                        print(f"Resolved user_id from customer_id: {user_id}")
 
-                new_end = base_dt + timedelta(days=ACCESS_DAYS)
+            if not user_id:
+                print("Could not resolve user_id from metadata or customer — ignoring")
+                return {"received": True}
 
-                sb.table("user_profiles").update({
-                    "subscription_status": "active",
-                    "subscription_tier": "premium",
-                    "subscription_current_period_end": new_end.isoformat(),
-                }).eq("id", user_id).execute()
+            # ============================================================
+            # AI INTAKE ($29) — flag the intake_session as paid
+            # ============================================================
+            if product_type == "ai_intake":
+                intake_session_id = metadata.get("intake_session_id")
+                if intake_session_id:
+                    sb.table("intake_sessions").update({
+                        "is_paid": True,
+                        "paid_at": datetime.now(timezone.utc).isoformat(),
+                        "stripe_payment_intent_id": obj.get("payment_intent"),
+                    }).eq("id", intake_session_id).execute()
+                    print(f"Granted AI intake access for session {intake_session_id}")
+                return {"received": True}
 
-                print(f"Granted {ACCESS_DAYS} days of access to user {user_id} until {new_end.isoformat()}")
+            # ============================================================
+            # 90-DAY ACCESS ($9.99) — extend access window
+            # ============================================================
+            resp = sb.table("user_profiles").select(
+                "subscription_status, subscription_current_period_end"
+            ).eq("id", user_id).execute()
+            rows = resp.data or []
+            current = rows[0] if rows else {}
+
+            now = datetime.now(timezone.utc)
+            base_dt = now
+
+            if current.get("subscription_status") == "active":
+                existing_end = current.get("subscription_current_period_end")
+                if existing_end:
+                    try:
+                        existing_dt = datetime.fromisoformat(existing_end.replace("Z", "+00:00"))
+                        if existing_dt > now:
+                            base_dt = existing_dt  # Stack on top
+                    except Exception:
+                        pass
+
+            new_end = base_dt + timedelta(days=ACCESS_DAYS)
+
+            update_resp = sb.table("user_profiles").update({
+                "subscription_status": "active",
+                "subscription_tier": "premium",
+                "subscription_current_period_end": new_end.isoformat(),
+            }).eq("id", user_id).execute()
+
+            print(f"Granted {ACCESS_DAYS} days of access to user {user_id} until {new_end.isoformat()}. Update result: {update_resp}")
 
     except Exception as e:
-        # Don't 500 — Stripe will retry forever. Log and ack.
+        # Log the FULL exception so we can debug
+        import traceback
         print(f"Webhook handler error for {event_type}: {e}")
+        traceback.print_exc()
 
     return {"received": True}
