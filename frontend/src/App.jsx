@@ -202,6 +202,7 @@ function App() {
               { id: 'eligibility', label: t('nav.eligibility') },
               { id: 'visaforms', label: t('nav.visaforms') },
               { id: 'sponsorship', label: t('nav.sponsorship') },
+              { id: 'intake', label: t('nav.intake') },
               { id: 'predictor', label: t('nav.predictor') },
               { id: 'history', label: t('nav.history') }
             ].map(tab => (
@@ -236,6 +237,7 @@ function App() {
           </PaywallGate>
         )}
         {activeTab === 'history' && <UserHistory user={user} />}
+        {activeTab === 'intake' && <AIIntake user={user} />}
       </main>
 
       {/* Footer */}
