@@ -35,6 +35,14 @@ try:
 except Exception as e:
     print(f"Stripe routes not loaded: {e}")
 
+# Mount AI Intake routes (requires Anthropic + Resend env vars)
+try:
+    from intake_routes import router as intake_router
+    app.include_router(intake_router)
+    print("Intake routes loaded")
+except Exception as e:
+    print(f"Intake routes not loaded: {e}")
+
 # Model globals
 model = None
 tokenizer = None
