@@ -50,6 +50,7 @@ export const translations = {
   'nav.predictor': { en: 'Case Predictor (Beta)', es: 'Predictor (Beta)' },
   'nav.history': { en: 'My Cases', es: 'Mis Casos' },
   'nav.intake': { en: 'AI Intake ($29)', es: 'Consulta IA ($29)' },
+  'nav.fraud': { en: '🔍 Fraud Check ($4.99)', es: '🔍 Detector Fraude ($4.99)' },
 
   // ===== Home Page =====
   'home.hero.title': { en: 'AI-Powered Immigration Case Analysis', es: 'Análisis de Casos de Inmigración con IA' },
