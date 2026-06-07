@@ -299,10 +299,31 @@ async def create_intake_checkout(req: CreateCheckoutRequest):
 
 @router.get("/sessions/{user_id}")
 async def list_user_intakes(user_id: str):
-    """List all intake sessions for a user (paid and pending)."""
+    """List all intake sessions for a user (paid and pending). Verifies payment with Stripe as a backup."""
     sb = get_supabase()
     resp = sb.table("intake_sessions").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
-    return {"sessions": resp.data or []}
+    sessions = resp.data or []
+
+    # Backup payment verification: for any unpaid session that has a Stripe checkout ID,
+    # ask Stripe directly if it's been paid. This handles webhook delivery failures.
+    if stripe.api_key:
+        for s in sessions:
+            if not s.get("is_paid") and s.get("stripe_checkout_session_id"):
+                try:
+                    checkout = stripe.checkout.Session.retrieve(s["stripe_checkout_session_id"])
+                    if checkout.payment_status == "paid":
+                        # Mark as paid in DB
+                        sb.table("intake_sessions").update({
+                            "is_paid": True,
+                            "paid_at": datetime.now(timezone.utc).isoformat(),
+                            "stripe_payment_intent_id": checkout.payment_intent,
+                        }).eq("id", s["id"]).execute()
+                        s["is_paid"] = True  # update in-memory copy too
+                        print(f"Backup verification: marked intake {s['id']} as paid")
+                except Exception as e:
+                    print(f"Backup verification failed for {s['id']}: {e}")
+
+    return {"sessions": sessions}
 
 
 @router.post("/start")
