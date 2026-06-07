@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from './supabase'
 import { useLang, useT } from './i18n.jsx'
 import PaywallGate, { SubscriptionBadge } from './PaywallGate.jsx'
-import AIIntake from './AIIntake.jsx'
 
 const API_URL = import.meta.env.VITE_API_URL || 
   (window.location.hostname.includes('railway.app') 
@@ -90,6 +89,14 @@ function App() {
       window.history.replaceState({}, '', window.location.pathname)
     }
     if (params.get('canceled') === 'true') {
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+    if (params.get('intake_paid') === 'true') {
+      setActiveTab('intake')
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+    if (params.get('intake_canceled') === 'true') {
+      setActiveTab('intake')
       window.history.replaceState({}, '', window.location.pathname)
     }
   }, [])
