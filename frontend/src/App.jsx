@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from './supabase'
 import { useLang, useT } from './i18n.jsx'
 import PaywallGate, { SubscriptionBadge } from './PaywallGate.jsx'
+import AIIntake from './AIIntake.jsx'
 
 const API_URL = import.meta.env.VITE_API_URL || 
   (window.location.hostname.includes('railway.app') 
