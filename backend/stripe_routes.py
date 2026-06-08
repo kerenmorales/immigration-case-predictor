@@ -211,6 +211,19 @@ async def stripe_webhook(request: Request, stripe_signature: Optional[str] = Hea
                 return {"received": True}
 
             # ============================================================
+            # FRAUD CHECK ($4.99) — flag the fraud_check as paid
+            # ============================================================
+            if product_type == "fraud_check":
+                fraud_check_id = metadata.get("fraud_check_id")
+                if fraud_check_id:
+                    sb.table("fraud_checks").update({
+                        "is_paid": True,
+                        "paid_at": datetime.now(timezone.utc).isoformat(),
+                    }).eq("id", fraud_check_id).execute()
+                    print(f"Granted fraud check access for {fraud_check_id}")
+                return {"received": True}
+
+            # ============================================================
             # 90-DAY ACCESS ($9.99) — extend access window
             # ============================================================
             resp = sb.table("user_profiles").select(

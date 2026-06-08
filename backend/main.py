@@ -43,6 +43,14 @@ try:
 except Exception as e:
     print(f"Intake routes not loaded: {e}")
 
+# Mount Fraud Check routes (requires Anthropic env var)
+try:
+    from fraud_routes import router as fraud_router
+    app.include_router(fraud_router)
+    print("Fraud check routes loaded")
+except Exception as e:
+    print(f"Fraud check routes not loaded: {e}")
+
 # Model globals
 model = None
 tokenizer = None
