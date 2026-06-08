@@ -3,6 +3,7 @@ import { supabase } from './supabase'
 import { useLang, useT } from './i18n.jsx'
 import PaywallGate, { SubscriptionBadge } from './PaywallGate.jsx'
 import AIIntake from './AIIntake.jsx'
+import FraudCheck from './FraudCheck.jsx'
 
 const API_URL = import.meta.env.VITE_API_URL || 
   (window.location.hostname.includes('railway.app') 
@@ -100,6 +101,15 @@ function App() {
       setActiveTab('intake')
       window.history.replaceState({}, '', window.location.pathname)
     }
+        if (params.get('fraud_paid') === 'true') {
+      setActiveTab('fraud')
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+    if (params.get('fraud_canceled') === 'true') {
+      setActiveTab('fraud')
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+
   }, [])
 
   // Listen for password recovery flow
@@ -212,6 +222,7 @@ function App() {
               { id: 'visaforms', label: t('nav.visaforms') },
               { id: 'sponsorship', label: t('nav.sponsorship') },
               { id: 'intake', label: t('nav.intake') },
+              { id: 'fraud', label: t('nav.fraud') },
               { id: 'predictor', label: t('nav.predictor') },
               { id: 'history', label: t('nav.history') }
             ].map(tab => (
@@ -247,6 +258,8 @@ function App() {
         )}
         {activeTab === 'history' && <UserHistory user={user} />}
         {activeTab === 'intake' && <AIIntake user={user} />}
+        {activeTab === 'fraud' && <FraudCheck user={user} setActiveTab={setActiveTab} />}
+        
       </main>
 
       {/* Footer */}
