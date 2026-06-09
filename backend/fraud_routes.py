@@ -24,10 +24,11 @@ Endpoints:
 
 import os
 import io
+import re
 import base64
 import json
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, List, Tuple
 
 import stripe
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
@@ -75,6 +76,148 @@ def get_supabase() -> Client:
             raise RuntimeError("Supabase env vars missing")
         _supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
     return _supabase
+
+
+# ============================================================
+# Scam indicators — curated reference data
+# ============================================================
+
+_INDICATORS_PATH = os.path.join(os.path.dirname(__file__), "scam_indicators.json")
+_indicators_cache: Optional[dict] = None
+
+
+def get_scam_indicators() -> dict:
+    """Load and cache the curated scam indicators JSON. Returns {} on failure."""
+    global _indicators_cache
+    if _indicators_cache is None:
+        try:
+            with open(_INDICATORS_PATH, "r", encoding="utf-8") as f:
+                _indicators_cache = json.load(f)
+        except Exception as e:
+            print(f"Could not load scam_indicators.json: {e}")
+            _indicators_cache = {}
+    return _indicators_cache
+
+
+def _build_indicators_summary_for_prompt(ind: dict) -> str:
+    """Build a compact text block injected into the Claude prompt."""
+    if not ind:
+        return ""
+
+    legit_domains = ", ".join(ind.get("legitimate_ircc_domains", []))
+    fraud_domains = ", ".join(ind.get("known_fraudulent_domain_patterns", [])[:15])
+    fraud_pay = ", ".join(ind.get("fraudulent_payment_methods", [])[:10])
+    urgency_es = ", ".join(f'"{p}"' for p in ind.get("urgency_red_flag_phrases_es", [])[:6])
+    guarantee_es = ", ".join(f'"{p}"' for p in ind.get("guaranteed_approval_red_flags_es", [])[:5])
+    no_official = ", ".join(ind.get("ircc_does_not_use_for_official_communication", [])[:8])
+    spanish_scams = ind.get("spanish_speaker_targeted_scams", [])
+
+    spanish_scams_text = ""
+    for s in spanish_scams[:5]:
+        spanish_scams_text += f"\n  • {s.get('name','')}: {s.get('description_es','')}"
+
+    return f"""
+
+REFERENCE DATA — KNOWN INDICATORS (curated, updated regularly):
+
+LEGITIMATE IRCC DOMAINS (sender or URL must be one of these):
+  {legit_domains}
+
+KNOWN FRAUDULENT DOMAIN PATTERNS (treat any of these as HIGH severity):
+  {fraud_domains}
+
+FRAUDULENT PAYMENT METHODS (any of these = HIGH severity):
+  {fraud_pay}
+
+URGENCY RED FLAG PHRASES (Spanish):
+  {urgency_es}
+
+GUARANTEED APPROVAL RED FLAGS (Spanish):
+  {guarantee_es}
+
+CHANNELS IRCC NEVER USES OFFICIALLY:
+  {no_official}
+
+KNOWN SCAMS TARGETING SPANISH-SPEAKING IMMIGRANTS:{spanish_scams_text}
+
+Use the above as authoritative reference. If the document matches any of these patterns, score the corresponding severity as documented."""
+
+
+# ============================================================
+# WHOIS / domain age check
+# ============================================================
+
+URL_REGEX = re.compile(
+    r"https?://([A-Za-z0-9.\-]+\.[A-Za-z]{2,})|(?<![A-Za-z0-9])([A-Za-z0-9\-]+\.(?:com|net|org|ca|gc\.ca|info|co|biz|app|io|me|us))",
+    re.IGNORECASE,
+)
+
+
+def _extract_domains_from_text(text: str) -> List[str]:
+    """Pull out unique domains/URLs from text. Returns lowercased domains."""
+    if not text:
+        return []
+    seen = set()
+    for m in URL_REGEX.finditer(text):
+        d = (m.group(1) or m.group(2) or "").lower().strip().rstrip(".")
+        if d and d not in seen:
+            seen.add(d)
+    return list(seen)
+
+
+def _check_domain_age(domain: str) -> Optional[dict]:
+    """
+    Look up creation date of a domain via WHOIS.
+    Returns {'domain', 'creation_date', 'age_days', 'is_new'} or None on failure.
+    Best-effort, never raises.
+    """
+    if not domain:
+        return None
+    try:
+        import whois  # python-whois
+        w = whois.whois(domain)
+        created = w.creation_date
+        if isinstance(created, list):
+            created = created[0] if created else None
+        if not created:
+            return {"domain": domain, "creation_date": None, "age_days": None, "is_new": None}
+        if not isinstance(created, datetime):
+            try:
+                created = datetime.fromisoformat(str(created))
+            except Exception:
+                return {"domain": domain, "creation_date": str(created), "age_days": None, "is_new": None}
+
+        # Normalize to UTC-aware
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        age_days = (datetime.now(timezone.utc) - created).days
+        return {
+            "domain": domain,
+            "creation_date": created.isoformat(),
+            "age_days": age_days,
+            "is_new": age_days < 730,  # less than 2 years
+        }
+    except Exception as e:
+        print(f"WHOIS lookup failed for {domain}: {e}")
+        return None
+
+
+def _whois_check_all(domains: List[str], legit_domains: List[str]) -> List[dict]:
+    """Run WHOIS on up to 5 domains, skipping known-legitimate ones."""
+    legit_set = {d.lower() for d in legit_domains}
+    results = []
+    checked = 0
+    for d in domains:
+        if checked >= 5:
+            break
+        # Skip exact matches and subdomains of known legit IRCC domains
+        if any(d == ld or d.endswith("." + ld) for ld in legit_set):
+            continue
+        info = _check_domain_age(d)
+        if info:
+            results.append(info)
+            checked += 1
+    return results
 
 
 # ============================================================
@@ -135,6 +278,17 @@ OUTPUT FORMAT — return ONLY this JSON, no other text:
   "could_not_verify": [
     "<one sentence in Spanish about something we couldn't determine, like 'whether the application number is real'>"
   ],
+  "extracted_entities": {
+    "claimed_names": ["<any person name found in the document who appears to be acting as a representative, lawyer, consultant, or 'officer'>"],
+    "claimed_titles": ["<title or role they claim, in original language: 'RCIC', 'Notario', 'Abogado de inmigración', 'IRCC Officer', etc.>"],
+    "claimed_license_numbers": ["<any RCIC R-number (R123456), bar number, or license number mentioned>"],
+    "claimed_province": "<if a Canadian province is implied/stated: ON, BC, QC, AB, MB, SK, NS, NB, PE, NL, NT, YT, NU, or null>",
+    "domains_mentioned": ["<each unique domain or URL extracted from the document, e.g. 'canada-ircc.com'>"],
+    "phone_numbers_mentioned": ["<phone numbers extracted, formatted as written>"],
+    "email_addresses_mentioned": ["<email addresses extracted>"],
+    "payment_methods_requested": ["<payment methods mentioned: 'Western Union', 'Bitcoin wallet abc...', 'Interac e-Transfer to john@gmail.com', etc.>"],
+    "money_amount_requested": "<amount + currency if specific amount is asked, e.g. '$2,500 CAD'; null if none>"
+  },
   "recommended_action": "<2-3 sentences in Spanish telling user what to do next, based on the score>",
   "educational_notes": "<3-4 sentences in Spanish explaining how legitimate IRCC documents look/work, relevant to this case>"
 }
@@ -356,6 +510,8 @@ async def upload_and_analyze(
         "document_type": analysis.get("document_type", "other"),
         "recommended_action": analysis.get("recommended_action", ""),
         "educational_notes": analysis.get("educational_notes", ""),
+        "extracted_entities": analysis.get("extracted_entities", {}),
+        "domain_age_checks": analysis.get("domain_age_checks", []),
     }).eq("id", fraud_check_id).execute()
 
     # Email a copy to the user (best-effort, non-fatal)
@@ -384,6 +540,11 @@ def _analyze_with_claude(content: bytes, mime_type: str, user_context: str) -> d
 
     from anthropic import Anthropic
     client = Anthropic(api_key=ANTHROPIC_API_KEY)
+
+    # Load curated indicators and inject into the system prompt
+    indicators = get_scam_indicators()
+    indicators_block = _build_indicators_summary_for_prompt(indicators)
+    augmented_system_prompt = FRAUD_DETECTION_PROMPT + indicators_block
 
     # Encode image as base64
     b64 = base64.b64encode(content).decode("utf-8")
@@ -419,8 +580,8 @@ def _analyze_with_claude(content: bytes, mime_type: str, user_context: str) -> d
 
     resp = client.messages.create(
         model="claude-sonnet-4-5-20250929",
-        max_tokens=2000,
-        system=FRAUD_DETECTION_PROMPT,
+        max_tokens=2500,
+        system=augmented_system_prompt,
         messages=[{"role": "user", "content": user_message_parts}],
     )
 
@@ -448,6 +609,8 @@ def _analyze_with_claude(content: bytes, mime_type: str, user_context: str) -> d
             "could_not_verify": ["No pudimos analizar este documento automáticamente."],
             "recommended_action": "Recomendamos consultar directamente con un abogado o RCIC autorizado, o llamar a IRCC al 1-888-242-2100 para verificar.",
             "educational_notes": "Cuando reciba documentos importantes de IRCC, siempre verifique enlaces, dominios de correo, y métodos de pago oficiales.",
+            "extracted_entities": {},
+            "domain_age_checks": [],
         }
 
     # Safety: cap confidence at 95
@@ -455,6 +618,33 @@ def _analyze_with_claude(content: bytes, mime_type: str, user_context: str) -> d
         parsed["confidence_score"] = min(95, max(0, int(parsed["confidence_score"])))
     else:
         parsed["confidence_score"] = 0
+
+    # Post-process: WHOIS check on extracted domains
+    extracted = parsed.get("extracted_entities") or {}
+    domains = extracted.get("domains_mentioned") or []
+    legit_domains = indicators.get("legitimate_ircc_domains", [])
+
+    domain_age_checks = _whois_check_all(domains, legit_domains)
+    parsed["domain_age_checks"] = domain_age_checks
+
+    # If WHOIS flagged any newly registered (< 2 years) domain, bump score and add a pattern
+    new_domains = [d for d in domain_age_checks if d.get("is_new")]
+    if new_domains:
+        # Add pattern entry
+        patterns = parsed.get("patterns_detected") or []
+        for d in new_domains:
+            patterns.append({
+                "pattern": "Dominio recién registrado",
+                "severity": "high",
+                "explanation": (
+                    f"El dominio '{d['domain']}' fue registrado hace solo {d['age_days']} días. "
+                    "Los dominios oficiales de IRCC tienen más de 20 años. Dominios nuevos que pretenden ser oficiales son una señal fuerte de fraude."
+                ),
+            })
+        parsed["patterns_detected"] = patterns
+        # Bump confidence score (cap at 95)
+        bump = min(20, 8 * len(new_domains))
+        parsed["confidence_score"] = min(95, parsed["confidence_score"] + bump)
 
     return parsed
 
@@ -481,6 +671,8 @@ def _send_fraud_result_email(user_email: str, analysis: dict, document_filename:
     could_not_verify = analysis.get("could_not_verify") or []
     recommended = analysis.get("recommended_action") or ""
     educational = analysis.get("educational_notes") or ""
+    extracted = analysis.get("extracted_entities") or {}
+    domain_checks = analysis.get("domain_age_checks") or []
 
     # Score band label + color
     if score >= 80:
@@ -543,6 +735,79 @@ def _send_fraud_result_email(user_email: str, analysis: dict, document_filename:
         </div>
         """
 
+    # Verification helper — only shown when document mentions a person/license
+    claimed_names = extracted.get("claimed_names") or []
+    claimed_titles = extracted.get("claimed_titles") or []
+    claimed_licenses = extracted.get("claimed_license_numbers") or []
+    claimed_province = extracted.get("claimed_province") or ""
+
+    verify_html = ""
+    if claimed_names or claimed_titles or claimed_licenses:
+        names_line = ", ".join(claimed_names) if claimed_names else "(nombre no identificado)"
+        titles_line = ", ".join(claimed_titles) if claimed_titles else ""
+        licenses_line = ", ".join(claimed_licenses) if claimed_licenses else ""
+
+        province_links = {
+            "ON": ('Law Society of Ontario', 'https://lso.ca/public-resources/finding-a-lawyer-or-paralegal/lawyer-and-paralegal-directory'),
+            "BC": ('Law Society of BC', 'https://www.lawsociety.bc.ca/lsbc/apps/lkup/mbr-search.cfm'),
+            "QC": ('Barreau du Québec', 'https://www.barreau.qc.ca/en/public/find-lawyer-notary/'),
+            "AB": ('Law Society of Alberta', 'https://www.lawsociety.ab.ca/lawyer-directory/'),
+            "MB": ('Law Society of Manitoba', 'https://lawsociety.mb.ca/for-the-public/find-a-lawyer/'),
+            "SK": ('Law Society of Saskatchewan', 'https://www.lawsociety.sk.ca/lawyer-look-up/'),
+            "NS": ('Nova Scotia Barristers Society', 'https://nsbs.org/find-a-lawyer/'),
+            "NB": ('Law Society of New Brunswick', 'https://lawsociety-barreau.nb.ca/en/public/find-a-lawyer/'),
+        }
+
+        prov_link_html = ""
+        if claimed_province in province_links:
+            label, url = province_links[claimed_province]
+            prov_link_html = f'<li><a href="{url}">{label}</a></li>'
+        else:
+            prov_link_html = "".join(
+                f'<li><a href="{url}">{label}</a></li>'
+                for label, url in [province_links[k] for k in ["ON", "BC", "QC", "AB"]]
+            )
+
+        verify_html = f"""
+        <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:18px;margin:22px 0;">
+            <h3 style="color:#1e40af;margin-top:0;">🔍 Verifique a esta persona</h3>
+            <p style="color:#1e3a8a;font-size:14px;">
+                El documento menciona: <strong>{names_line}</strong>{f' · {titles_line}' if titles_line else ''}{f' · Licencia/Reg.: {licenses_line}' if licenses_line else ''}.
+            </p>
+            <p style="color:#1e3a8a;font-size:14px;">
+                <strong>En Canadá, solo abogados licenciados, RCIC registrados, o notarios de Quebec pueden cobrar por servicios de inmigración.</strong>
+                Si esta persona NO aparece en estos registros, está cometiendo un delito federal.
+            </p>
+            <p style="color:#1e3a8a;font-weight:600;margin-bottom:6px;">Verifique gratis aquí:</p>
+            <ul style="color:#1e3a8a;font-size:14px;">
+                <li><strong>RCIC (consultor de inmigración):</strong>
+                    <a href="https://college-ic.ca/protecting-the-public/find-an-immigration-consultant">CICC — buscar consultor</a>
+                </li>
+                <li><strong>Abogado canadiense ({claimed_province or 'ver provincia'}):</strong>
+                    <ul>{prov_link_html}</ul>
+                </li>
+                <li><strong>Notario de Quebec:</strong>
+                    <a href="https://www.cnq.org/en/find-a-notary/">Chambre des notaires</a>
+                </li>
+            </ul>
+        </div>
+        """
+
+    # Domain WHOIS results
+    whois_html = ""
+    new_domains = [d for d in domain_checks if d.get("is_new")]
+    if new_domains:
+        items = ""
+        for d in new_domains:
+            items += f"<li><strong>{d['domain']}</strong> — registrado hace solo {d['age_days']} días</li>"
+        whois_html = f"""
+        <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:14px;margin:18px 0;">
+            <h3 style="color:#9a3412;margin-top:0;">🌐 Dominios sospechosamente nuevos</h3>
+            <p style="color:#7c2d12;font-size:14px;">Los siguientes dominios tienen menos de 2 años. Los dominios oficiales de IRCC tienen más de 20 años.</p>
+            <ul style="color:#7c2d12;font-size:14px;">{items}</ul>
+        </div>
+        """
+
     legend_html = """
     <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin:20px 0;font-size:13px;color:#475569;">
         <strong>Cómo leer su puntaje (menor = mejor):</strong>
@@ -575,6 +840,10 @@ def _send_fraud_result_email(user_email: str, analysis: dict, document_filename:
         </div>
 
         {legend_html}
+
+        {verify_html}
+
+        {whois_html}
 
         {cta_html}
 

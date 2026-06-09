@@ -1,0 +1,248 @@
+{
+  "_meta": {
+    "description": "Curated list of fraud indicators specific to Canadian immigration scams targeting Spanish-speaking immigrants. Update weekly. Sources: Canadian Anti-Fraud Centre (CAFC), IRCC public alerts, College of Immigration & Citizenship Consultants (CICC) disciplinary records, and user-reported cases.",
+    "last_updated": "2026-06-09",
+    "review_cadence": "weekly",
+    "sources": [
+      "https://antifraudcentre-centreantifraude.ca/scams-fraudes/list-liste-eng.htm",
+      "https://www.canada.ca/en/immigration-refugees-citizenship/services/protect-fraud.html",
+      "https://college-ic.ca/protecting-the-public/find-an-immigration-consultant"
+    ]
+  },
+
+  "legitimate_ircc_domains": [
+    "canada.ca",
+    "cic.gc.ca",
+    "ircc.gc.ca",
+    "gc.ca"
+  ],
+
+  "legitimate_ircc_phone_numbers": [
+    "1-888-242-2100",
+    "613-944-1310"
+  ],
+
+  "legitimate_ircc_email_subjects_format": [
+    "Begin with case-specific subject (e.g., 'Application UCI 1234-5678-90')",
+    "Reference application or UCI numbers in standard format",
+    "No emotional/threatening language ('URGENT', 'FINAL NOTICE', 'DEPORTATION')"
+  ],
+
+  "known_fraudulent_domain_patterns": [
+    "canada-ircc.com",
+    "canada-ircc.org",
+    "canada-ircc.net",
+    "ircc-canada.com",
+    "ircc-canada.org",
+    "gov-canada.ca",
+    "canada-gov.com",
+    "canada-gov.org",
+    "canadianvisa.com",
+    "canadavisa-online.com",
+    "ircc-online.com",
+    "ircc-portal.com",
+    "ircc-services.com",
+    "canadaimmigration-online.com",
+    "gov-canada-immigration.com",
+    "ircc-application.com",
+    "ircc-status.com",
+    "canada-immigration-services.com",
+    "canadian-immigration.org",
+    "immigration-canada.org",
+    "canadianimmigration.net"
+  ],
+
+  "fraudulent_domain_red_flag_patterns": [
+    "Domains containing 'ircc' but NOT ending in .gc.ca",
+    "Domains containing 'canada' but NOT ending in canada.ca or .gc.ca",
+    "Hyphenated government-sounding names (canada-immigration-x.com)",
+    "Top-level domains other than .ca or .gc.ca claiming Canadian government",
+    "Newly registered domains (less than 2 years old) claiming to be IRCC",
+    "Subdomains of free hosting (.netlify.app, .vercel.app, .github.io) claiming to be official"
+  ],
+
+  "fraudulent_payment_methods": [
+    "Western Union",
+    "MoneyGram",
+    "Bitcoin / cryptocurrency wallet addresses",
+    "Ethereum / USDT / any crypto",
+    "Gift cards (iTunes, Google Play, Amazon, Steam)",
+    "Wire transfer to a personal individual (not Receiver General for Canada)",
+    "Interac e-Transfer to a personal email (real IRCC fees go through canada.ca portal only)",
+    "PayPal to a personal account claiming to be 'IRCC officer'",
+    "Cash via Western Union 'Officer' pickup",
+    "Direct bank deposit to a personal account number"
+  ],
+
+  "legitimate_payment_method": "All real IRCC fees are paid online through the canada.ca portal only. Recipient is 'Receiver General for Canada'. Never to a person. Never via crypto, wire, gift card, Western Union, or e-Transfer to an individual.",
+
+  "urgency_red_flag_phrases_es": [
+    "pague en 24 horas",
+    "pague inmediatamente",
+    "deportación inmediata",
+    "será deportado",
+    "última oportunidad",
+    "aviso final",
+    "URGENTE",
+    "no responda y será arrestado",
+    "su visa será cancelada hoy",
+    "notificación final"
+  ],
+
+  "urgency_red_flag_phrases_en": [
+    "pay within 24 hours",
+    "pay immediately",
+    "immediate deportation",
+    "you will be deported",
+    "final notice",
+    "last chance",
+    "URGENT - immediate action required",
+    "respond now or face arrest",
+    "your visa will be cancelled today",
+    "final warning"
+  ],
+
+  "guaranteed_approval_red_flags_es": [
+    "aprobación garantizada",
+    "100% garantizado",
+    "garantía de visa",
+    "aprobación segura",
+    "trámite express garantizado",
+    "no hay rechazo posible",
+    "tengo contacto directo con IRCC",
+    "conozco a un oficial",
+    "puedo agilizar su caso por dentro"
+  ],
+
+  "guaranteed_approval_red_flags_en": [
+    "guaranteed approval",
+    "100% guaranteed",
+    "visa guarantee",
+    "guaranteed visa",
+    "I have a contact at IRCC",
+    "I know an officer",
+    "I can speed up your case internally",
+    "no possibility of refusal",
+    "express approval guaranteed"
+  ],
+
+  "personal_info_never_requested_by_email_or_text": [
+    "Social Insurance Number (SIN)",
+    "Full credit card number",
+    "Credit card CVV",
+    "Online banking password",
+    "Email account password",
+    "Mother's maiden name",
+    "Bank account PIN",
+    "Full passport scan via WhatsApp/email (real IRCC asks via secure portal)"
+  ],
+
+  "ircc_does_not_use_for_official_communication": [
+    "WhatsApp",
+    "Facebook Messenger",
+    "Instagram DM",
+    "Telegram",
+    "SMS / text messages (except basic notifications, never asking for payment or info)",
+    "Personal cell phone numbers",
+    "Free email providers (Gmail, Yahoo, Hotmail, Outlook.com, Proton)",
+    "Zoom / Skype calls demanding immediate payment"
+  ],
+
+  "common_impersonation_titles_es": [
+    "Oficial Smith",
+    "Agente IRCC",
+    "Oficial de Inmigración Canadá",
+    "Notario Canadiense",
+    "Consultor Certificado IRCC",
+    "Abogado de Inmigración Canadá",
+    "Representante Oficial IRCC"
+  ],
+
+  "common_impersonation_titles_en": [
+    "Officer Smith",
+    "IRCC Agent",
+    "Canada Immigration Officer",
+    "Canadian Notary",
+    "IRCC Certified Consultant",
+    "Canada Immigration Lawyer Officer",
+    "Official IRCC Representative"
+  ],
+
+  "spanish_speaker_targeted_scams": [
+    {
+      "name": "El falso notario WhatsApp",
+      "description_es": "Una persona se hace pasar por 'notario' canadiense y ofrece tramitar visa de inmigración por WhatsApp. Pide pagos por Western Union o transferencia bancaria personal. En Canadá los notarios NO tramitan inmigración — solo abogados o RCIC autorizados.",
+      "indicators": ["Contacto inicial por WhatsApp", "Se identifica como 'notario'", "Pide pago por Western Union/transferencia personal", "Promete trámite rápido"]
+    },
+    {
+      "name": "Oferta de trabajo falsa con LMIA",
+      "description_es": "Le ofrecen un trabajo en Canadá con LMIA aprobado pero piden $5,000-$15,000 USD por adelantado para 'procesar el LMIA'. Los empleadores reales NUNCA cobran al trabajador por un LMIA — eso es ilegal.",
+      "indicators": ["Pago por adelantado por LMIA", "Oferta de trabajo no solicitada", "Empresa con sitio web nuevo o inexistente", "Comunicación solo por email/WhatsApp"]
+    },
+    {
+      "name": "Caso de patrocinio express",
+      "description_es": "Alguien promete patrocinio matrimonial garantizado por $20,000-$30,000. Real fee de patrocinio es ~$1,135 CAD. No existen 'patrocinios garantizados'.",
+      "indicators": ["Patrocinio garantizado", "Costos muy superiores a fees oficiales", "Pago en efectivo o crypto", "Pareja canadiense desconocida"]
+    },
+    {
+      "name": "El refund/reembolso falso de CRA",
+      "description_es": "Un mensaje SMS dice que tiene un reembolso pendiente de Canada Revenue Agency relacionado con su trámite migratorio y que haga clic en un enlace. CRA NO comunica reembolsos por SMS.",
+      "indicators": ["SMS con enlace acortado", "Reembolso inesperado", "Enlace no es canada.ca"]
+    },
+    {
+      "name": "Estudio en Canadá con admisión garantizada",
+      "description_es": "Una 'agencia educativa' garantiza admisión a una universidad canadiense + visa de estudiante por un pago grande. Las admisiones reales las da la universidad directamente, no agentes.",
+      "indicators": ["Admisión garantizada", "Universidades de baja reputación o falsas", "Comunicación por WhatsApp/Telegram", "Pago por adelantado"]
+    }
+  ],
+
+  "format_red_flags_visual": [
+    "Logo IRCC borroso o de baja resolución",
+    "Sello de Canadá distorsionado",
+    "Tipografía inconsistente (varias fuentes en mismo documento)",
+    "Errores ortográficos en términos oficiales (IRCCC, Inmigration Canada, Citisenship)",
+    "Maple leaf incorrecto o de proporciones extrañas",
+    "Pie de página con dirección postal inexistente o que no coincide con dirección oficial IRCC",
+    "Firma escaneada de baja calidad",
+    "Encabezado dice 'IRCC' pero contenido habla en términos genéricos sin números de caso reales"
+  ],
+
+  "real_ircc_communication_patterns": [
+    "References specific UCI (Unique Client Identifier) number — 8-10 digits in format 1234-5678 or 1234-5678-90",
+    "References application number in proper IRCC format",
+    "Email comes from @cic.gc.ca, @canada.ca, or @ircc.gc.ca (NEVER gmail/yahoo/hotmail)",
+    "Provides reasonable timelines (weeks/months, not hours)",
+    "Does NOT request payment via email — directs to canada.ca portal",
+    "Does NOT threaten deportation, arrest, or imminent visa cancellation",
+    "Provides official phone number 1-888-242-2100 for verification",
+    "Letter has IRCC letterhead with high-resolution maple leaf and proper Government of Canada wordmark",
+    "Bilingual French/English content as standard"
+  ],
+
+  "newly_registered_domain_threshold_years": 2,
+
+  "high_severity_indicators": [
+    "Payment method is cash/crypto/Western Union/MoneyGram",
+    "Domain age less than 2 years claiming IRCC",
+    "Domain not in legitimate_ircc_domains but mentions IRCC/Canada immigration",
+    "Personal cell phone or WhatsApp claiming to be IRCC",
+    "Threatens deportation in less than 7 days",
+    "Asks for SIN/credit card/banking password",
+    "Promises guaranteed approval"
+  ],
+
+  "medium_severity_indicators": [
+    "Free email provider (gmail/yahoo) claiming IRCC role",
+    "Spelling/grammar errors in supposedly official document",
+    "Logo or seal appears low resolution or distorted",
+    "References 'agent' or 'officer' by first name only",
+    "Communication only in one language when bilingual is standard"
+  ],
+
+  "low_severity_indicators": [
+    "Generic greeting (Dear Applicant) instead of name",
+    "No specific case/UCI number referenced",
+    "Lacks contact information for verification",
+    "Email signature missing official department line"
+  ]
+}
