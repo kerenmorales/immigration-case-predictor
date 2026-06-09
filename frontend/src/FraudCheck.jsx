@@ -415,6 +415,8 @@ function FraudResult({ user, check, setActiveTab, lang }) {
   const patterns = check.patterns_detected || []
   const legitimate = check.patterns_legitimate || []
   const couldNotVerify = check.could_not_verify || []
+  const extracted = check.extracted_entities || {}
+  const domainChecks = check.domain_age_checks || []
 
   // Determine color and CTA based on score
   const config = scoreConfig(score, lang)
@@ -494,6 +496,12 @@ function FraudResult({ user, check, setActiveTab, lang }) {
           </p>
         </div>
       </div>
+
+      {/* Verification helper — for documents mentioning lawyers/RCICs/notarios */}
+      <VerificationHelper extracted={extracted} lang={lang} />
+
+      {/* Domain WHOIS — flag newly-registered domains */}
+      <DomainAgeFlags domainChecks={domainChecks} lang={lang} />
 
       {/* High-risk CTA */}
       {score >= 50 && (
@@ -740,6 +748,236 @@ function ConfidenceBadge({ score, label, lang }) {
       'bg-green-100 text-green-800'
     }`}>
       {score}% {config.emoji}
+    </div>
+  )
+}
+
+
+// ============================================================
+// Verification Helper — direct links to CICC + provincial law societies
+// ============================================================
+//
+// In Canada, only RCICs (registered with CICC), lawyers (registered with their
+// provincial law society), and Quebec notaries can legally charge for immigration
+// services. We don't auto-scrape registries — we hand the user the right link
+// and let them verify in 60 seconds.
+
+const PROVINCE_LINKS = {
+  ON: { label: 'Law Society of Ontario', url: 'https://lso.ca/public-resources/finding-a-lawyer-or-paralegal/lawyer-and-paralegal-directory' },
+  BC: { label: 'Law Society of BC', url: 'https://www.lawsociety.bc.ca/lsbc/apps/lkup/mbr-search.cfm' },
+  QC: { label: 'Barreau du Québec', url: 'https://www.barreau.qc.ca/en/public/find-lawyer-notary/' },
+  AB: { label: 'Law Society of Alberta', url: 'https://www.lawsociety.ab.ca/lawyer-directory/' },
+  MB: { label: 'Law Society of Manitoba', url: 'https://lawsociety.mb.ca/for-the-public/find-a-lawyer/' },
+  SK: { label: 'Law Society of Saskatchewan', url: 'https://www.lawsociety.sk.ca/lawyer-look-up/' },
+  NS: { label: 'Nova Scotia Barristers Society', url: 'https://nsbs.org/find-a-lawyer/' },
+  NB: { label: 'Law Society of New Brunswick', url: 'https://lawsociety-barreau.nb.ca/en/public/find-a-lawyer/' },
+  PE: { label: 'Law Society of PEI', url: 'https://lspei.pe.ca/public/find-a-lawyer/' },
+  NL: { label: 'Law Society of NL', url: 'https://lawsociety.nf.ca/for-the-public/find-a-lawyer/' },
+}
+
+function VerificationHelper({ extracted, lang }) {
+  const names = extracted?.claimed_names || []
+  const titles = extracted?.claimed_titles || []
+  const licenses = extracted?.claimed_license_numbers || []
+  const province = extracted?.claimed_province || ''
+
+  // Don't render if nothing to verify
+  if (names.length === 0 && titles.length === 0 && licenses.length === 0) {
+    return null
+  }
+
+  // Show 4 most relevant law society links: claimed province first, then top 3 by population
+  const defaultProvinces = ['ON', 'BC', 'QC', 'AB']
+  const orderedProvinces = province && PROVINCE_LINKS[province]
+    ? [province, ...defaultProvinces.filter(p => p !== province)]
+    : defaultProvinces
+  const visibleProvinces = orderedProvinces.slice(0, 4)
+
+  return (
+    <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-6">
+      <div className="flex items-start gap-3 mb-3">
+        <div className="text-3xl">🔍</div>
+        <div className="flex-1">
+          <h3 className="font-bold text-blue-900 text-lg">
+            {lang === 'es' ? 'Verifique a esta persona' : 'Verify this person'}
+          </h3>
+          <p className="text-sm text-blue-800 mt-1">
+            {lang === 'es'
+              ? 'El documento menciona a alguien que dice tener autoridad. Verifíquelo gratis en los registros oficiales.'
+              : 'The document mentions someone claiming authority. Verify them in official registries (free).'}
+          </p>
+        </div>
+      </div>
+
+      {/* What we extracted */}
+      <div className="bg-white border border-blue-200 rounded-lg p-4 mb-4 text-sm">
+        {names.length > 0 && (
+          <div className="mb-1">
+            <span className="font-semibold text-slate-700">
+              {lang === 'es' ? 'Nombre(s):' : 'Name(s):'}
+            </span>{' '}
+            <span className="text-slate-800">{names.join(', ')}</span>
+          </div>
+        )}
+        {titles.length > 0 && (
+          <div className="mb-1">
+            <span className="font-semibold text-slate-700">
+              {lang === 'es' ? 'Título reclamado:' : 'Claimed title:'}
+            </span>{' '}
+            <span className="text-slate-800">{titles.join(', ')}</span>
+          </div>
+        )}
+        {licenses.length > 0 && (
+          <div className="mb-1">
+            <span className="font-semibold text-slate-700">
+              {lang === 'es' ? 'Licencia/Reg. #:' : 'License/Reg #:'}
+            </span>{' '}
+            <span className="font-mono text-slate-800">{licenses.join(', ')}</span>
+          </div>
+        )}
+        {province && PROVINCE_LINKS[province] && (
+          <div>
+            <span className="font-semibold text-slate-700">
+              {lang === 'es' ? 'Provincia:' : 'Province:'}
+            </span>{' '}
+            <span className="text-slate-800">{province}</span>
+          </div>
+        )}
+      </div>
+
+      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 text-xs text-amber-900">
+        <strong>
+          {lang === 'es' ? '⚖️ Ley canadiense:' : '⚖️ Canadian law:'}
+        </strong>{' '}
+        {lang === 'es'
+          ? 'Solo abogados licenciados, RCIC registrados, o notarios de Quebec pueden cobrar por servicios de inmigración. Cualquier otra persona que cobre comete un delito federal (Sección 91 IRPA).'
+          : 'Only licensed lawyers, registered RCICs, or Quebec notaries can charge for immigration services. Anyone else charging is committing a federal offense (Section 91 IRPA).'}
+      </div>
+
+      <p className="font-semibold text-blue-900 text-sm mb-2">
+        {lang === 'es' ? 'Verifique aquí (gratis, 60 segundos):' : 'Verify here (free, 60 seconds):'}
+      </p>
+
+      <div className="space-y-3">
+        {/* CICC — RCIC consultants */}
+        <a
+          href="https://college-ic.ca/protecting-the-public/find-an-immigration-consultant"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-start gap-3 p-3 bg-white border border-blue-200 hover:border-blue-400 hover:bg-blue-50 rounded-lg transition-colors"
+        >
+          <div className="text-2xl">🇨🇦</div>
+          <div className="flex-1">
+            <div className="font-semibold text-blue-900 text-sm">
+              {lang === 'es' ? 'CICC — Consultor de inmigración (RCIC)' : 'CICC — Immigration consultant (RCIC)'}
+            </div>
+            <div className="text-xs text-slate-600 mt-0.5">
+              {lang === 'es'
+                ? 'Si dice ser "RCIC" o "consultor de inmigración registrado", busque por nombre o número R.'
+                : 'If they claim to be "RCIC" or registered immigration consultant, search by name or R-number.'}
+            </div>
+          </div>
+          <div className="text-blue-600 text-sm">→</div>
+        </a>
+
+        {/* Provincial law societies */}
+        {visibleProvinces.map(prov => {
+          const info = PROVINCE_LINKS[prov]
+          if (!info) return null
+          return (
+            <a
+              key={prov}
+              href={info.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-start gap-3 p-3 bg-white border border-blue-200 hover:border-blue-400 hover:bg-blue-50 rounded-lg transition-colors"
+            >
+              <div className="text-2xl">⚖️</div>
+              <div className="flex-1">
+                <div className="font-semibold text-blue-900 text-sm">
+                  {info.label}{province === prov ? ` ⭐ (${lang === 'es' ? 'provincia mencionada' : 'mentioned province'})` : ''}
+                </div>
+                <div className="text-xs text-slate-600 mt-0.5">
+                  {lang === 'es' ? 'Si dice ser abogado en esta provincia.' : 'If they claim to be a lawyer in this province.'}
+                </div>
+              </div>
+              <div className="text-blue-600 text-sm">→</div>
+            </a>
+          )
+        })}
+
+        {/* Quebec notaries */}
+        <a
+          href="https://www.cnq.org/en/find-a-notary/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-start gap-3 p-3 bg-white border border-blue-200 hover:border-blue-400 hover:bg-blue-50 rounded-lg transition-colors"
+        >
+          <div className="text-2xl">📜</div>
+          <div className="flex-1">
+            <div className="font-semibold text-blue-900 text-sm">
+              {lang === 'es' ? 'Chambre des notaires du Québec' : 'Chambre des notaires du Québec'}
+            </div>
+            <div className="text-xs text-slate-600 mt-0.5">
+              {lang === 'es'
+                ? 'Solo si dice ser notario de Quebec. ⚠️ "Notarios" en otras provincias NO pueden hacer trámites de inmigración.'
+                : 'Only if they claim to be a Quebec notary. ⚠️ "Notarios" in other provinces CANNOT do immigration work.'}
+            </div>
+          </div>
+          <div className="text-blue-600 text-sm">→</div>
+        </a>
+      </div>
+
+      <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800">
+        <strong>
+          {lang === 'es' ? '🚨 Si NO aparece en ningún registro:' : '🚨 If NOT found in any registry:'}
+        </strong>{' '}
+        {lang === 'es'
+          ? 'Esa persona no puede cobrar legalmente por servicios de inmigración en Canadá. Es una señal muy fuerte de fraude. Considere reportar al Canadian Anti-Fraud Centre (1-888-495-8501).'
+          : 'That person cannot legally charge for Canadian immigration services. This is a very strong fraud signal. Consider reporting to the Canadian Anti-Fraud Centre (1-888-495-8501).'}
+      </div>
+    </div>
+  )
+}
+
+
+// ============================================================
+// DomainAgeFlags — surfaces newly-registered domains as a strong fraud signal
+// ============================================================
+function DomainAgeFlags({ domainChecks, lang }) {
+  const newDomains = (domainChecks || []).filter(d => d?.is_new)
+  if (newDomains.length === 0) return null
+
+  return (
+    <div className="bg-orange-50 border-2 border-orange-200 rounded-xl p-5">
+      <div className="flex items-start gap-3 mb-2">
+        <div className="text-3xl">🌐</div>
+        <div className="flex-1">
+          <h3 className="font-bold text-orange-900">
+            {lang === 'es' ? 'Dominios sospechosamente nuevos' : 'Suspiciously new domains'}
+          </h3>
+          <p className="text-sm text-orange-800 mt-1">
+            {lang === 'es'
+              ? 'Los dominios oficiales de IRCC tienen más de 20 años. Estos dominios son recientes:'
+              : 'Official IRCC domains are 20+ years old. These domains are recent:'}
+          </p>
+        </div>
+      </div>
+      <ul className="space-y-2 mt-3">
+        {newDomains.map((d, i) => (
+          <li key={i} className="bg-white border border-orange-200 rounded-lg p-3 flex items-center justify-between">
+            <div>
+              <span className="font-mono text-sm text-orange-900 font-semibold">{d.domain}</span>
+              <span className="text-xs text-orange-700 ml-2">
+                {lang === 'es' ? 'registrado hace' : 'registered'} {d.age_days} {lang === 'es' ? 'días' : 'days ago'}
+              </span>
+            </div>
+            <span className="px-2 py-1 bg-orange-200 text-orange-900 rounded-full text-xs font-bold">
+              {lang === 'es' ? 'Sospechoso' : 'Suspicious'}
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }
