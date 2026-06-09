@@ -169,13 +169,26 @@ def _check_domain_age(domain: str) -> Optional[dict]:
     """
     Look up creation date of a domain via WHOIS.
     Returns {'domain', 'creation_date', 'age_days', 'is_new'} or None on failure.
-    Best-effort, never raises.
+    Best-effort, never raises. Hard 5-second timeout — WHOIS servers can hang.
     """
     if not domain:
         return None
-    try:
+
+    import concurrent.futures
+
+    def _do_lookup():
         import whois  # python-whois
-        w = whois.whois(domain)
+        return whois.whois(domain)
+
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(_do_lookup)
+            try:
+                w = future.result(timeout=5)  # hard 5s timeout
+            except concurrent.futures.TimeoutError:
+                print(f"WHOIS timeout for {domain}")
+                return None
+
         created = w.creation_date
         if isinstance(created, list):
             created = created[0] if created else None
@@ -203,20 +216,38 @@ def _check_domain_age(domain: str) -> Optional[dict]:
 
 
 def _whois_check_all(domains: List[str], legit_domains: List[str]) -> List[dict]:
-    """Run WHOIS on up to 5 domains, skipping known-legitimate ones."""
+    """
+    Run WHOIS on up to 3 domains in parallel, with a global 8-second budget.
+    Skips known-legitimate domains. Failures and timeouts are silent.
+    """
+    import concurrent.futures
+
     legit_set = {d.lower() for d in legit_domains}
-    results = []
-    checked = 0
+    candidates: List[str] = []
     for d in domains:
-        if checked >= 5:
+        if len(candidates) >= 3:
             break
-        # Skip exact matches and subdomains of known legit IRCC domains
         if any(d == ld or d.endswith("." + ld) for ld in legit_set):
             continue
-        info = _check_domain_age(d)
-        if info:
-            results.append(info)
-            checked += 1
+        candidates.append(d)
+
+    if not candidates:
+        return []
+
+    results: List[dict] = []
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
+            future_to_domain = {ex.submit(_check_domain_age, d): d for d in candidates}
+            try:
+                for future in concurrent.futures.as_completed(future_to_domain, timeout=8):
+                    info = future.result()
+                    if info:
+                        results.append(info)
+            except concurrent.futures.TimeoutError:
+                print("Global WHOIS budget exceeded — returning partial results")
+    except Exception as e:
+        print(f"WHOIS batch failed: {e}")
+
     return results
 
 
@@ -619,12 +650,17 @@ def _analyze_with_claude(content: bytes, mime_type: str, user_context: str) -> d
     else:
         parsed["confidence_score"] = 0
 
-    # Post-process: WHOIS check on extracted domains
+    # Post-process: WHOIS check on extracted domains (best-effort, never blocks long)
     extracted = parsed.get("extracted_entities") or {}
     domains = extracted.get("domains_mentioned") or []
     legit_domains = indicators.get("legitimate_ircc_domains", [])
 
-    domain_age_checks = _whois_check_all(domains, legit_domains)
+    try:
+        domain_age_checks = _whois_check_all(domains, legit_domains)
+    except Exception as e:
+        print(f"WHOIS step failed (non-fatal): {e}")
+        domain_age_checks = []
+
     parsed["domain_age_checks"] = domain_age_checks
 
     # If WHOIS flagged any newly registered (< 2 years) domain, bump score and add a pattern
