@@ -545,14 +545,21 @@ async def upload_and_analyze(
         "domain_age_checks": analysis.get("domain_age_checks", []),
     }).eq("id", fraud_check_id).execute()
 
-    # Email a copy to the user (best-effort, non-fatal)
+    # Email a copy to the user (best-effort, non-fatal, hard 8s timeout)
     if user_email:
         try:
-            _send_fraud_result_email(
-                user_email=user_email,
-                analysis=analysis,
-                document_filename=file.filename,
-            )
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+                future = ex.submit(
+                    _send_fraud_result_email,
+                    user_email=user_email,
+                    analysis=analysis,
+                    document_filename=file.filename,
+                )
+                try:
+                    future.result(timeout=8)
+                except concurrent.futures.TimeoutError:
+                    print(f"Fraud result email timed out (non-fatal) for {user_email}")
         except Exception as e:
             print(f"Fraud result email failed (non-fatal): {e}")
 
@@ -570,7 +577,8 @@ def _analyze_with_claude(content: bytes, mime_type: str, user_context: str) -> d
         raise RuntimeError("ANTHROPIC_API_KEY not configured")
 
     from anthropic import Anthropic
-    client = Anthropic(api_key=ANTHROPIC_API_KEY)
+    # Hard 90-second timeout on the Claude API call so we never hang forever
+    client = Anthropic(api_key=ANTHROPIC_API_KEY, timeout=90.0)
 
     # Load curated indicators and inject into the system prompt
     indicators = get_scam_indicators()
@@ -609,15 +617,37 @@ def _analyze_with_claude(content: bytes, mime_type: str, user_context: str) -> d
         "text": f"Por favor analice este documento para señales de fraude.{context_text}\n\nResponda SOLO con el JSON especificado, sin texto antes o después.",
     })
 
-    resp = client.messages.create(
-        model="claude-sonnet-4-5-20250929",
-        max_tokens=2500,
-        system=augmented_system_prompt,
-        messages=[{"role": "user", "content": user_message_parts}],
-    )
+    try:
+        resp = client.messages.create(
+            model="claude-sonnet-4-5-20250929",
+            max_tokens=2500,
+            system=augmented_system_prompt,
+            messages=[{"role": "user", "content": user_message_parts}],
+        )
+    except Exception as e:
+        # Includes anthropic.APITimeoutError, APIConnectionError, etc.
+        print(f"Claude API call failed: {type(e).__name__}: {e}")
+        return {
+            "confidence_score": 0,
+            "confidence_label": "unclear",
+            "document_type": "other",
+            "patterns_detected": [],
+            "patterns_legitimate": [],
+            "could_not_verify": [
+                "El análisis automático no pudo completarse (tiempo de espera agotado o servicio no disponible)."
+            ],
+            "recommended_action": (
+                "Por favor intente subir el documento de nuevo en unos minutos. "
+                "Si el problema continúa, recomendamos consultar directamente con un abogado o RCIC autorizado, "
+                "o llamar a IRCC al 1-888-242-2100."
+            ),
+            "educational_notes": "",
+            "extracted_entities": {},
+            "domain_age_checks": [],
+        }
 
-    raw = resp.content[0].text if resp.content else "{}"
-    raw = raw.strip()
+    raw = resp.content[0].text if resp and getattr(resp, "content", None) else "{}"
+    raw = (raw or "{}").strip()
 
     # Strip markdown code fences if present
     if raw.startswith("```"):
