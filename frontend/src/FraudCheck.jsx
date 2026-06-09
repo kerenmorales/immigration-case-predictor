@@ -27,6 +27,7 @@ export default function FraudCheck({ user, setActiveTab }) {
   const [activeCheck, setActiveCheck] = useState(null)
   const [error, setError] = useState(null)
   const [pastChecks, setPastChecks] = useState([])
+  const [analysisError, setAnalysisError] = useState(null)
 
   // On mount, check for active or past fraud checks
   useEffect(() => {
@@ -103,7 +104,7 @@ export default function FraudCheck({ user, setActiveTab }) {
     )
   }
   if (view === 'upload' && activeCheck) {
-    return <FraudUpload user={user} activeCheck={activeCheck} onAnalyzing={() => setView('analyzing')} onComplete={(updated) => { setActiveCheck(updated); setView('result') }} onError={() => setView('upload')} lang={lang} />
+    return <FraudUpload user={user} activeCheck={activeCheck} onAnalyzing={() => { setAnalysisError(null); setView('analyzing') }} onComplete={(updated) => { setActiveCheck(updated); setView('result') }} onError={(msg) => { setAnalysisError(msg); setView('upload') }} initialError={analysisError} lang={lang} />
   }
   if (view === 'analyzing') {
     return <AnalyzingScreen lang={lang} />
@@ -272,11 +273,11 @@ function FraudIntro({ lang, onStart, pastChecks, onViewPast, error }) {
 // ============================================================
 // 2. UPLOAD COMPONENT
 // ============================================================
-function FraudUpload({ user, activeCheck, onAnalyzing, onComplete, onError, lang }) {
+function FraudUpload({ user, activeCheck, onAnalyzing, onComplete, onError, initialError, lang }) {
   const [file, setFile] = useState(null)
   const [context, setContext] = useState('')
   const [uploading, setUploading] = useState(false)
-  const [error, setError] = useState(null)
+  const [error, setError] = useState(initialError || null)
   const fileInputRef = useRef(null)
 
   const handleSubmit = async () => {
@@ -316,18 +317,37 @@ function FraudUpload({ user, activeCheck, onAnalyzing, onComplete, onError, lang
       clearTimeout(timeoutId)
       const msg = e.name === 'AbortError'
         ? (lang === 'es'
-            ? 'El análisis tardó demasiado (más de 2 minutos). Por favor intente con un archivo más pequeño o inténtelo de nuevo en unos minutos.'
-            : 'Analysis took too long (over 2 minutes). Please try a smaller file or try again in a few minutes.')
-        : e.message
+            ? 'El análisis tardó más de 2 minutos. Su pago sigue siendo válido — vuelva a intentarlo. Si el problema continúa, contacte a Keren para reembolso.'
+            : 'Analysis took over 2 minutes. Your payment is still valid — please retry. If the problem persists, contact Keren for a refund.')
+        : (e.message || 'Analysis failed')
       setError(msg)
       setUploading(false)
-      // Route back to the upload screen so the user can retry
-      if (onError) onError()
+      // Notify parent so the error survives the view switch
+      if (onError) onError(msg)
     }
   }
 
   return (
     <div className="space-y-6">
+      {error && (
+        <div className="bg-red-50 border-2 border-red-300 rounded-xl p-5">
+          <div className="flex items-start gap-3">
+            <div className="text-3xl">⚠️</div>
+            <div className="flex-1">
+              <h3 className="font-bold text-red-900 mb-1">
+                {lang === 'es' ? 'No se pudo completar el análisis' : 'Analysis could not complete'}
+              </h3>
+              <p className="text-sm text-red-800">{error}</p>
+              <p className="text-xs text-red-700 mt-2">
+                {lang === 'es'
+                  ? 'Su pago de $4.99 sigue válido para este análisis. Vuelva a intentar abajo.'
+                  : 'Your $4.99 payment is still valid for this check. Try again below.'}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="bg-amber-50 px-6 py-4 border-b border-amber-200">
           <h3 className="font-semibold text-slate-800">
@@ -393,7 +413,7 @@ function FraudUpload({ user, activeCheck, onAnalyzing, onComplete, onError, lang
             </p>
           </div>
 
-          {error && (
+          {error && !error.startsWith('Por favor') && !error.startsWith('Please') ? null : error && (
             <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">{error}</div>
           )}
 
