@@ -265,10 +265,13 @@ function FraudIntro({ lang, onStart, pastChecks, onViewPast, error }) {
       )}
 
       <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs text-slate-600">
+        <p className="font-semibold text-slate-700 mb-1">
+          ⚖️ {lang === 'es' ? 'Antes de continuar, entienda:' : 'Before continuing, understand:'}
+        </p>
         <p>
           {lang === 'es'
-            ? 'Aviso: Este análisis se basa en patrones comunes de fraude. No puede determinar con certeza si una persona u organización específica está cometiendo fraude. Siempre verifique con IRCC al 1-888-242-2100 o un abogado autorizado antes de tomar acción.'
-            : 'Disclaimer: This analysis is based on common fraud patterns. It cannot determine with certainty whether any specific person or organization is committing fraud. Always verify with IRCC at 1-888-242-2100 or a licensed lawyer before taking action.'}
+            ? 'Este análisis es una opinión automatizada por IA basada en patrones comunes de fraude. NO es asesoría legal, NO crea una relación abogado-cliente, y NO puede determinar con certeza si una persona u organización específica está cometiendo fraude. La IA puede equivocarse. Siempre verifique con IRCC al 1-888-242-2100 o con un abogado autorizado / RCIC antes de tomar acción.'
+            : 'This analysis is an automated AI opinion based on common fraud patterns. It is NOT legal advice, does NOT create an attorney-client relationship, and CANNOT determine with certainty whether any specific person or organization is committing fraud. AI can be wrong. Always verify with IRCC at 1-888-242-2100 or a licensed lawyer / RCIC before taking action.'}
         </p>
       </div>
     </div>
@@ -301,6 +304,7 @@ function FraudUpload({ user, activeCheck, onAnalyzing, onComplete, lang }) {
       fd.append('fraud_check_id', activeCheck.id)
       fd.append('user_id', user.id)
       fd.append('user_context', context)
+      fd.append('user_email', user.email || '')
 
       const resp = await fetch(`${API_URL}/fraud/upload`, { method: 'POST', body: fd })
       if (!resp.ok) {
@@ -434,6 +438,60 @@ function FraudResult({ user, check, setActiveTab, lang }) {
         </div>
         <div className="bg-white/60 rounded-lg p-4">
           <p className={`text-sm ${config.titleClass}`}>{check.recommended_action}</p>
+        </div>
+      </div>
+
+      {/* Score legend — helps users interpret the score */}
+      <div className="bg-white border border-slate-200 rounded-xl p-5">
+        <h3 className="font-semibold text-slate-800 mb-2 text-sm">
+          {lang === 'es' ? '📊 Cómo leer su puntaje (menor = mejor)' : '📊 How to read your score (lower = better)'}
+        </h3>
+        <ul className="space-y-1.5 text-sm">
+          <li className="flex items-start gap-2">
+            <span className={`px-2 py-0.5 rounded-full text-xs font-bold w-16 text-center ${score < 20 ? 'bg-green-200 text-green-900 ring-2 ring-green-400' : 'bg-green-100 text-green-800'}`}>0–19%</span>
+            <span className="text-slate-700">
+              {lang === 'es' ? 'No se detectaron señales — el documento parece legítimo ✅' : 'No fraud signals detected — looks legitimate ✅'}
+            </span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className={`px-2 py-0.5 rounded-full text-xs font-bold w-16 text-center ${score >= 20 && score < 40 ? 'bg-yellow-200 text-yellow-900 ring-2 ring-yellow-400' : 'bg-yellow-100 text-yellow-800'}`}>20–39%</span>
+            <span className="text-slate-700">
+              {lang === 'es' ? 'Pocos marcadores — probablemente legítimo, pero verifique' : 'Few markers — probably legit, but verify'}
+            </span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className={`px-2 py-0.5 rounded-full text-xs font-bold w-16 text-center ${score >= 40 && score < 60 ? 'bg-amber-200 text-amber-900 ring-2 ring-amber-400' : 'bg-amber-100 text-amber-800'}`}>40–59%</span>
+            <span className="text-slate-700">
+              {lang === 'es' ? 'Señales mixtas — inconcluyente' : 'Mixed signals — inconclusive'}
+            </span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className={`px-2 py-0.5 rounded-full text-xs font-bold w-16 text-center ${score >= 60 && score < 80 ? 'bg-orange-200 text-orange-900 ring-2 ring-orange-400' : 'bg-orange-100 text-orange-800'}`}>60–79%</span>
+            <span className="text-slate-700">
+              {lang === 'es' ? 'Varios patrones preocupantes' : 'Several concerning patterns'}
+            </span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className={`px-2 py-0.5 rounded-full text-xs font-bold w-16 text-center ${score >= 80 ? 'bg-red-200 text-red-900 ring-2 ring-red-400' : 'bg-red-100 text-red-800'}`}>80–95%</span>
+            <span className="text-slate-700">
+              {lang === 'es' ? 'Señales fuertes de fraude 🚨' : 'Strong fraud signals 🚨'}
+            </span>
+          </li>
+        </ul>
+      </div>
+
+      {/* Saved + emailed confirmation */}
+      <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-start gap-3">
+        <div className="text-2xl">💾</div>
+        <div className="flex-1 text-sm text-emerald-900">
+          <p className="font-medium">
+            {lang === 'es' ? 'Resultado guardado' : 'Result saved'}
+          </p>
+          <p className="text-emerald-800 mt-1">
+            {lang === 'es'
+              ? 'Guardamos este análisis en su cuenta y le enviamos una copia a su correo electrónico para que la conserve.'
+              : 'We saved this analysis to your account and sent a copy to your email for your records.'}
+          </p>
         </div>
       </div>
 
@@ -596,12 +654,16 @@ function FraudResult({ user, check, setActiveTab, lang }) {
         </div>
       </div>
 
-      {/* Disclaimer */}
-      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs text-slate-600">
-        <p>
+      {/* Disclaimer — NOT legal advice */}
+      <div className="bg-red-50 border-2 border-red-200 rounded-xl p-5">
+        <h3 className="font-bold text-red-900 mb-2 flex items-center gap-2">
+          <span>⚖️</span>
+          <span>{lang === 'es' ? 'AVISO IMPORTANTE — Esto NO es asesoría legal' : 'IMPORTANT — This is NOT legal advice'}</span>
+        </h3>
+        <p className="text-sm text-red-800 leading-relaxed">
           {lang === 'es'
-            ? 'Aviso: Este análisis es una opinión automatizada basada en patrones comunes. No es asesoría legal. No determina con certeza si una persona u organización está cometiendo fraude. Para certeza legal, consulte con un abogado autorizado o con Keren Morales.'
-            : 'Disclaimer: This analysis is an automated opinion based on common patterns. It is not legal advice. It cannot determine with certainty whether any specific person or organization is committing fraud. For legal certainty, consult a licensed lawyer or with Keren Morales.'}
+            ? 'Este análisis es una opinión automatizada generada por inteligencia artificial, basada en patrones comunes de fraude. NO constituye asesoría legal vinculante, NO crea una relación abogado-cliente, y NO reemplaza la consulta con un abogado autorizado o un consultor de inmigración (RCIC) registrado. Para certeza legal sobre su caso específico, consulte con un profesional licenciado o llame directamente a IRCC al 1-888-242-2100. La inteligencia artificial puede equivocarse — siempre verifique información crítica con una fuente oficial antes de tomar decisiones importantes.'
+            : 'This analysis is an automated opinion generated by artificial intelligence, based on common fraud patterns. It does NOT constitute binding legal advice, does NOT create an attorney-client relationship, and does NOT replace consultation with a licensed lawyer or registered immigration consultant (RCIC). For legal certainty on your specific case, consult a licensed professional or call IRCC directly at 1-888-242-2100. Artificial intelligence can be wrong — always verify critical information with an official source before making important decisions.'}
         </p>
       </div>
 
