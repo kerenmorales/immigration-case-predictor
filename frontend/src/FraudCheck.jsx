@@ -103,20 +103,10 @@ export default function FraudCheck({ user, setActiveTab }) {
     )
   }
   if (view === 'upload' && activeCheck) {
-    return <FraudUpload user={user} activeCheck={activeCheck} onAnalyzing={() => setView('analyzing')} onComplete={(updated) => { setActiveCheck(updated); setView('result') }} lang={lang} />
+    return <FraudUpload user={user} activeCheck={activeCheck} onAnalyzing={() => setView('analyzing')} onComplete={(updated) => { setActiveCheck(updated); setView('result') }} onError={() => setView('upload')} lang={lang} />
   }
   if (view === 'analyzing') {
-    return (
-      <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
-        <div className="text-2xl mb-3 animate-pulse">🔍</div>
-        <p className="text-slate-700 font-medium">
-          {lang === 'es' ? 'Analizando su documento...' : 'Analyzing your document...'}
-        </p>
-        <p className="text-sm text-slate-500 mt-2">
-          {lang === 'es' ? 'Esto toma 20-40 segundos.' : 'This takes 20-40 seconds.'}
-        </p>
-      </div>
-    )
+    return <AnalyzingScreen lang={lang} />
   }
   if (view === 'result' && activeCheck) {
     return <FraudResult user={user} check={activeCheck} setActiveTab={setActiveTab} lang={lang} />
@@ -282,7 +272,7 @@ function FraudIntro({ lang, onStart, pastChecks, onViewPast, error }) {
 // ============================================================
 // 2. UPLOAD COMPONENT
 // ============================================================
-function FraudUpload({ user, activeCheck, onAnalyzing, onComplete, lang }) {
+function FraudUpload({ user, activeCheck, onAnalyzing, onComplete, onError, lang }) {
   const [file, setFile] = useState(null)
   const [context, setContext] = useState('')
   const [uploading, setUploading] = useState(false)
@@ -298,6 +288,10 @@ function FraudUpload({ user, activeCheck, onAnalyzing, onComplete, lang }) {
     setError(null)
     onAnalyzing()
 
+    // Hard 2-minute client timeout so the UI can never freeze indefinitely
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 120000)
+
     try {
       const fd = new FormData()
       fd.append('file', file)
@@ -306,7 +300,12 @@ function FraudUpload({ user, activeCheck, onAnalyzing, onComplete, lang }) {
       fd.append('user_context', context)
       fd.append('user_email', user.email || '')
 
-      const resp = await fetch(`${API_URL}/fraud/upload`, { method: 'POST', body: fd })
+      const resp = await fetch(`${API_URL}/fraud/upload`, {
+        method: 'POST',
+        body: fd,
+        signal: controller.signal,
+      })
+      clearTimeout(timeoutId)
       if (!resp.ok) {
         const e = await resp.json().catch(() => ({}))
         throw new Error(e.detail || 'Analysis failed')
@@ -314,8 +313,16 @@ function FraudUpload({ user, activeCheck, onAnalyzing, onComplete, lang }) {
       const updatedCheck = await resp.json()
       onComplete(updatedCheck)
     } catch (e) {
-      setError(e.message)
+      clearTimeout(timeoutId)
+      const msg = e.name === 'AbortError'
+        ? (lang === 'es'
+            ? 'El análisis tardó demasiado (más de 2 minutos). Por favor intente con un archivo más pequeño o inténtelo de nuevo en unos minutos.'
+            : 'Analysis took too long (over 2 minutes). Please try a smaller file or try again in a few minutes.')
+        : e.message
+      setError(msg)
       setUploading(false)
+      // Route back to the upload screen so the user can retry
+      if (onError) onError()
     }
   }
 
@@ -978,6 +985,45 @@ function DomainAgeFlags({ domainChecks, lang }) {
           </li>
         ))}
       </ul>
+    </div>
+  )
+}
+
+
+
+// ============================================================
+// AnalyzingScreen — shows elapsed time + progressive status messages
+// so users know things are still moving and not frozen
+// ============================================================
+function AnalyzingScreen({ lang }) {
+  const [seconds, setSeconds] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => setSeconds(s => s + 1), 1000)
+    return () => clearInterval(id)
+  }, [])
+
+  const stage = (() => {
+    if (seconds < 10) return lang === 'es' ? 'Subiendo documento...' : 'Uploading document...'
+    if (seconds < 30) return lang === 'es' ? 'Analizando con IA...' : 'Analyzing with AI...'
+    if (seconds < 60) return lang === 'es' ? 'Verificando dominios y patrones...' : 'Verifying domains and patterns...'
+    if (seconds < 90) return lang === 'es' ? 'Casi listo, generando resultados...' : 'Almost done, generating results...'
+    return lang === 'es' ? 'Tomando más tiempo de lo usual...' : 'Taking longer than usual...'
+  })()
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
+      <div className="text-4xl mb-3 animate-pulse">🔍</div>
+      <p className="text-slate-700 font-medium">{stage}</p>
+      <p className="text-sm text-slate-500 mt-2">
+        {lang === 'es' ? 'Tiempo transcurrido:' : 'Elapsed:'} {seconds}s
+      </p>
+      {seconds > 90 && (
+        <p className="text-xs text-amber-600 mt-3">
+          {lang === 'es'
+            ? 'Si esto continúa más de 2 minutos, intentaremos de nuevo automáticamente.'
+            : 'If this continues past 2 minutes, we\'ll automatically retry.'}
+        </p>
+      )}
     </div>
   )
 }
